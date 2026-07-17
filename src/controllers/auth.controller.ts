@@ -22,6 +22,7 @@ export const resendAccountCounts = new Map<string, { count: number; resetAt: num
 function generateVerificationToken(): { rawToken: string; tokenHash: string } {
     const rawToken = crypto.randomBytes(32).toString('hex')
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+
     return { rawToken, tokenHash }
 }
 
@@ -43,6 +44,7 @@ function buildVerificationEmail(to: string, rawToken: string): { subject: string
   <p>If you did not create this account, please ignore this email.</p>
 </body>
 </html>`
+
     return { subject, body }
 }
 
@@ -177,6 +179,7 @@ export class AuthController {
             const validation = verifyEmailSchema.safeParse(req.body)
             if (!validation.success) {
                 res.status(400).json({ error: 'Invalid token' })
+
                 return
             }
 
@@ -185,6 +188,7 @@ export class AuthController {
             // Validate token format before hashing
             if (!/^[0-9a-f]{64}$/i.test(token)) {
                 res.status(400).json({ error: 'Invalid token' })
+
                 return
             }
 
@@ -197,16 +201,19 @@ export class AuthController {
 
             if (!verificationToken) {
                 res.status(400).json({ error: 'Invalid token' })
+
                 return
             }
 
             if (verificationToken.status === 'USED') {
                 res.status(200).json({ message: 'Email already verified' })
+
                 return
             }
 
             if (verificationToken.status === 'REVOKED') {
                 res.status(400).json({ error: 'Invalid token' })
+
                 return
             }
 
@@ -216,6 +223,7 @@ export class AuthController {
                     data: { status: 'REVOKED' },
                 })
                 res.status(400).json({ error: 'Token expired' })
+
                 return
             }
 
@@ -266,6 +274,7 @@ export class AuthController {
             if (!validation.success) {
                 // Neutral response regardless
                 res.status(200).json({ message: 'If the account exists, a verification email has been sent.' })
+
                 return
             }
 
@@ -279,6 +288,7 @@ export class AuthController {
 
             if (this.isRateLimited(`ip:${ip}`, RESEND_COOLDOWN_MS)) {
                 res.status(429).json({ error: 'Too many requests. Please try again later.' })
+
                 return
             }
 
@@ -287,23 +297,27 @@ export class AuthController {
 
             if (!user) {
                 res.status(200).json({ message: 'If the account exists, a verification email has been sent.' })
+
                 return
             }
 
             if (user.isVerified) {
                 res.status(200).json({ message: 'If the account exists, a verification email has been sent.' })
+
                 return
             }
 
             // Account rate limit check
             if (this.isAccountLimited(user.id)) {
                 res.status(429).json({ error: 'Too many requests. Please try again later.' })
+
                 return
             }
 
             // Cooldown per user
             if (this.isRateLimited(`user:${user.id}`, RESEND_COOLDOWN_MS)) {
                 res.status(429).json({ error: 'Too many requests. Please try again later.' })
+
                 return
             }
 
@@ -449,6 +463,7 @@ export class AuthController {
             return true
         }
         resendCooldowns.set(key, now + windowMs)
+
         return false
     }
 

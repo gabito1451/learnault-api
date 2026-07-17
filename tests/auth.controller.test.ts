@@ -3,7 +3,6 @@ import { Request, Response } from 'express'
 import { AuthController, resendCooldowns, resendAccountCounts } from '../src/controllers/auth.controller'
 import prisma from '../src/config/database'
 import bcrypt from 'bcryptjs'
-import crypto from 'crypto'
 import { emailService } from '../src/services/email.service'
 
 const mockTokenHash = 'abc123def456hash'
