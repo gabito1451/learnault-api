@@ -93,6 +93,35 @@
  *         user:
  *           $ref: '#/components/schemas/User'
  *
+ *     VerifyEmailInput:
+ *       type: object
+ *       required:
+ *         - token
+ *       properties:
+ *         token:
+ *           type: string
+ *
+ *     VerifyEmailResponse:
+ *       type: object
+ *       properties:
+ *         message:
+ *           type: string
+ *
+ *     ResendVerificationInput:
+ *       type: object
+ *       required:
+ *         - email
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *
+ *     ResendVerificationResponse:
+ *       type: object
+ *       properties:
+ *         message:
+ *           type: string
+ *
  *     Module:
  *       type: object
  *       properties:

@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { AuthController } from '../../controllers/auth.controller'
+import { authLimiter } from '../../middleware/rate-limit.middleware'
 
 const router: Router = Router()
 const authController = new AuthController()
@@ -16,7 +17,7 @@ router.post('/register', authController.register.bind(authController))
  * @desc Login user
  * @access Public
  */
-router.post('/login', authController.login.bind(authController))
+router.post('/login', authLimiter, authController.login.bind(authController))
 
 /**
  * @route POST /api/v1/auth/logout
@@ -24,5 +25,19 @@ router.post('/login', authController.login.bind(authController))
  * @access Public
  */
 router.post('/logout', authController.logout.bind(authController))
+
+/**
+ * @route POST /api/v1/auth/verify-email
+ * @desc Verify email with token
+ * @access Public
+ */
+router.post('/verify-email', authController.verifyEmail.bind(authController))
+
+/**
+ * @route POST /api/v1/auth/resend-verification
+ * @desc Resend verification email
+ * @access Public
+ */
+router.post('/resend-verification', authLimiter, authController.resendVerification.bind(authController))
 
 export default router

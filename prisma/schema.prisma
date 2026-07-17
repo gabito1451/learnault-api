@@ -13,6 +13,7 @@ model User {
   password        String
   role            Role           @default(LEARNER)
   walletAddress   String?        @unique
+  isVerified      Boolean        @default(false)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   lastLoginAt     DateTime?
@@ -26,8 +27,47 @@ model User {
   referralCode    ReferralCode?
   referrals       Referral[]     @relation("Referrer")
   referredBy      Referral?      @relation("Referree")
+  verificationTokens VerificationToken[]
+  emailDeliveries EmailDelivery[]
 
   @@map("users")
+}
+
+model VerificationToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  type      String   @default("EMAIL_VERIFICATION")
+  status    String   @default("PENDING") // PENDING, USED, REVOKED
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@map("verification_tokens")
+}
+
+model EmailDelivery {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  to           String
+  subject      String
+  body         String
+  type         String    @default("EMAIL_VERIFICATION")
+  status       String    @default("pending") // pending, sent, failed, dead-letter
+  error        String?
+  attemptCount Int       @default(0)
+  maxAttempts  Int       @default(5)
+  nextAttemptAt DateTime? @default(now())
+  lastAttemptAt DateTime?
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@map("email_deliveries")
 }
 
 model Module {
