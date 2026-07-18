@@ -1,0 +1,58 @@
+# ============================================================================
+# Docker Build Context Exclusions
+# Keep this file minimal — only exclude what is NOT needed for the build.
+# ============================================================================
+
+# Version control
+.git
+.github
+.gitignore
+
+# Dependencies (rebuilt inside container)
+node_modules
+
+# Build output (rebuilt inside container)
+dist
+build
+
+# Testing and coverage
+tests
+integrations
+coverage
+.nyc_output
+
+# Documentation (not needed for build)
+docs
+README.md
+ROADMAP.md
+PR_DESCRIPTION.md
+
+# Temporary / scratch files
+temp-prisma
+*.log
+lint_*.txt
+lint_output.json
+server_error*.txt
+
+# Environment files — secrets must NEVER be in the image
+.env*
+!.env.example
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Config files not required for compilation
+.prettierrc
+.prettierignore
+eslint.config.ts
+vitest.config.js
+nodemon.json
+swagger-server.ts
