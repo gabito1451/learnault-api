@@ -40,4 +40,18 @@ router.post('/verify-email', authController.verifyEmail.bind(authController))
  */
 router.post('/resend-verification', authLimiter, authController.resendVerification.bind(authController))
 
+/**
+ * @route POST /api/v1/auth/forgot-password
+ * @desc Request password reset email
+ * @access Public
+ */
+router.post('/forgot-password', authLimiter, authController.forgotPassword.bind(authController))
+
+/**
+ * @route POST /api/v1/auth/reset-password
+ * @desc Reset password with token
+ * @access Public
+ */
+router.post('/reset-password', authController.resetPassword.bind(authController))
+
 export default router

@@ -122,6 +122,27 @@
  *         message:
  *           type: string
  *
+ *     ForgotPasswordInput:
+ *       type: object
+ *       required:
+ *         - email
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *
+ *     ResetPasswordInput:
+ *       type: object
+ *       required:
+ *         - token
+ *         - newPassword
+ *       properties:
+ *         token:
+ *           type: string
+ *         newPassword:
+ *           type: string
+ *           format: password
+ *
  *     Module:
  *       type: object
  *       properties:
