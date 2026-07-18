@@ -3,7 +3,7 @@ import { Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import prisma from '../config/database'
-import { loginSchema, registerSchema, verifyEmailSchema, resendVerificationSchema } from '../schemas/auth.schema'
+import { loginSchema, registerSchema, verifyEmailSchema, resendVerificationSchema, forgotPasswordSchema, resetPasswordSchema } from '../schemas/auth.schema'
 import { UserRole } from '../types/user.types'
 import { emailService } from '../services/email.service'
 import logger from '../utils/logger'
@@ -12,12 +12,18 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-default-secret'
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d'
 
 const VERIFICATION_TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000 // 24 hours
+const PASSWORD_RESET_TOKEN_EXPIRY_MS = 30 * 60 * 1000 // 30 minutes
 const RESEND_COOLDOWN_MS = 60 * 1000 // 1 minute
 const RESEND_ACCOUNT_LIMIT = 5
 const RESEND_ACCOUNT_WINDOW_MS = 24 * 60 * 60 * 1000 // 24 hours
+const RESET_PASSWORD_COOLDOWN_MS = 60 * 1000 // 1 minute
+const RESET_PASSWORD_ACCOUNT_LIMIT = 3
+const RESET_PASSWORD_ACCOUNT_WINDOW_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 export const resendCooldowns = new Map<string, number>()
 export const resendAccountCounts = new Map<string, { count: number; resetAt: number }>()
+export const resetPasswordCooldowns = new Map<string, number>()
+export const resetPasswordAccountCounts = new Map<string, { count: number; resetAt: number }>()
 
 function generateVerificationToken(): { rawToken: string; tokenHash: string } {
     const rawToken = crypto.randomBytes(32).toString('hex')
@@ -42,6 +48,28 @@ function buildVerificationEmail(to: string, rawToken: string): { subject: string
   <pre style="background:#f5f5f5;padding:12px;font-size:14px">${rawToken}</pre>
   <p>This link expires in 24 hours.</p>
   <p>If you did not create this account, please ignore this email.</p>
+</body>
+</html>`
+
+    return { subject, body }
+}
+
+function buildPasswordResetEmail(to: string, rawToken: string): { subject: string; body: string } {
+    const subject = 'Reset your password'
+    const body = `\
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family:sans-serif;padding:24px">
+  <h2>Reset your password</h2>
+  <p>Use the link below to reset your password:</p>
+  <p><a href="${process.env.PASSWORD_RESET_BASE_URL || 'http://localhost:3000/reset-password'}?token=${rawToken}">
+    Reset password
+  </a></p>
+  <p>Or enter this token manually:</p>
+  <pre style="background:#f5f5f5;padding:12px;font-size:14px">${rawToken}</pre>
+  <p>This link expires in 30 minutes.</p>
+  <p>If you did not request this, please ignore this email.</p>
 </body>
 </html>`
 
@@ -448,6 +476,199 @@ export class AuthController {
         res.status(200).json({ message: 'Logged out successfully. Please clear your token client-side.' })
     }
 
+    /**
+     * @openapi
+     * /auth/forgot-password:
+     *   post:
+     *     summary: Request a password reset email
+     *     tags: [Auth]
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             $ref: '#/components/schemas/ForgotPasswordInput'
+     *     responses:
+     *       200:
+     *         description: If the account exists, a password reset email will be sent
+     *       429:
+     *         description: Too many requests
+     *       500:
+     *         description: Internal server error
+     */
+    async forgotPassword(req: Request, res: Response): Promise<void> {
+        try {
+            const validation = forgotPasswordSchema.safeParse(req.body)
+            if (!validation.success) {
+                res.status(200).json({ message: 'If the account exists, a password reset email has been sent.' })
+                return
+            }
+
+            const { email } = validation.data
+
+            const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+                || (req.headers['x-real-ip'] as string)
+                || req.socket.remoteAddress
+                || 'unknown'
+
+            if (this.isRateLimited(`reset:ip:${ip}`, RESET_PASSWORD_COOLDOWN_MS)) {
+                res.status(429).json({ error: 'Too many requests. Please try again later.' })
+                return
+            }
+
+            const user = await prisma.user.findUnique({ where: { email } })
+            if (!user) {
+                res.status(200).json({ message: 'If the account exists, a password reset email has been sent.' })
+                return
+            }
+
+            if (this.isResetPasswordAccountLimited(user.id)) {
+                res.status(429).json({ error: 'Too many requests. Please try again later.' })
+                return
+            }
+
+            if (this.isRateLimited(`reset:user:${user.id}`, RESET_PASSWORD_COOLDOWN_MS)) {
+                res.status(429).json({ error: 'Too many requests. Please try again later.' })
+                return
+            }
+
+            await prisma.verificationToken.updateMany({
+                where: { userId: user.id, status: 'PENDING', type: 'PASSWORD_RESET' },
+                data: { status: 'REVOKED' },
+            })
+
+            const { rawToken, tokenHash } = generateVerificationToken()
+            const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_EXPIRY_MS)
+
+            await prisma.verificationToken.create({
+                data: {
+                    userId: user.id,
+                    tokenHash,
+                    type: 'PASSWORD_RESET',
+                    expiresAt,
+                },
+            })
+
+            const { subject, body } = buildPasswordResetEmail(email, rawToken)
+            emailService.queueEmail(user.id, email, subject, body, 'PASSWORD_RESET').catch(err =>
+                logger.error('[Auth] Failed to queue password reset email:', err)
+            )
+
+            this.recordResetPasswordAccountRequest(user.id)
+
+            res.status(200).json({ message: 'If the account exists, a password reset email has been sent.' })
+        } catch (error) {
+            console.error('Forgot password error:', error)
+            res.status(500).json({ error: 'Internal server error' })
+        }
+    }
+
+    /**
+     * @openapi
+     * /auth/reset-password:
+     *   post:
+     *     summary: Reset password with a token
+     *     tags: [Auth]
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             $ref: '#/components/schemas/ResetPasswordInput'
+     *     responses:
+     *       200:
+     *         description: Password reset successful
+     *       400:
+     *         description: Invalid token or password
+     *       500:
+     *         description: Internal server error
+     */
+    async resetPassword(req: Request, res: Response): Promise<void> {
+        try {
+            const validation = resetPasswordSchema.safeParse(req.body)
+            if (!validation.success) {
+                res.status(400).json({ error: 'Invalid token or password' })
+                return
+            }
+
+            const { token, newPassword } = validation.data
+
+            if (!/^[0-9a-f]{64}$/i.test(token)) {
+                res.status(400).json({ error: 'Invalid token' })
+                return
+            }
+
+            const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+
+            const resetToken = await prisma.verificationToken.findFirst({
+                where: { tokenHash, type: 'PASSWORD_RESET' },
+                include: { user: true },
+            })
+
+            if (!resetToken) {
+                res.status(400).json({ error: 'Invalid token' })
+                return
+            }
+
+            if (resetToken.status === 'USED' || resetToken.status === 'REVOKED') {
+                res.status(400).json({ error: 'Invalid token' })
+                return
+            }
+
+            if (new Date() > resetToken.expiresAt) {
+                await prisma.verificationToken.update({
+                    where: { id: resetToken.id },
+                    data: { status: 'REVOKED' },
+                })
+                res.status(400).json({ error: 'Token expired' })
+                return
+            }
+
+            const salt = await bcrypt.genSalt(10)
+            const hashedPassword = await bcrypt.hash(newPassword, salt)
+
+            const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+                || (req.headers['x-real-ip'] as string)
+                || req.socket.remoteAddress
+                || 'unknown'
+            const userAgent = req.headers['user-agent'] || 'unknown'
+
+            await prisma.$transaction([
+                prisma.verificationToken.update({
+                    where: { id: resetToken.id },
+                    data: { status: 'USED' },
+                }),
+                prisma.user.update({
+                    where: { id: resetToken.userId },
+                    data: { password: hashedPassword },
+                }),
+                prisma.verificationToken.updateMany({
+                    where: { userId: resetToken.userId, status: 'PENDING' },
+                    data: { status: 'REVOKED' },
+                }),
+                prisma.session.updateMany({
+                    where: { userId: resetToken.userId, isRevoked: false },
+                    data: { isRevoked: true, revokedAt: new Date() },
+                }),
+                prisma.auditLog.create({
+                    data: {
+                        userId: resetToken.userId,
+                        action: 'PASSWORD_RESET',
+                        ipAddress: ip,
+                        userAgent: userAgent,
+                        metadata: JSON.stringify({}),
+                    },
+                }),
+            ])
+
+            logger.info(`[Auth] Password reset for user ${resetToken.userId}`)
+            res.status(200).json({ message: 'Password reset successful' })
+        } catch (error) {
+            console.error('Reset password error:', error)
+            res.status(500).json({ error: 'Internal server error' })
+        }
+    }
+
     private generateToken(userId: string, role: string): string {
         return jwt.sign(
             { id: userId, role },
@@ -484,6 +705,28 @@ export class AuthController {
 
         if (!record || record.resetAt < now) {
             resendAccountCounts.set(userId, { count: 1, resetAt: now + RESEND_ACCOUNT_WINDOW_MS })
+        } else {
+            record.count++
+        }
+    }
+
+    private isResetPasswordAccountLimited(userId: string): boolean {
+        const now = Date.now()
+        const record = resetPasswordAccountCounts.get(userId)
+
+        if (!record || record.resetAt < now) {
+            return false
+        }
+
+        return record.count >= RESET_PASSWORD_ACCOUNT_LIMIT
+    }
+
+    private recordResetPasswordAccountRequest(userId: string): void {
+        const now = Date.now()
+        const record = resetPasswordAccountCounts.get(userId)
+
+        if (!record || record.resetAt < now) {
+            resetPasswordAccountCounts.set(userId, { count: 1, resetAt: now + RESET_PASSWORD_ACCOUNT_WINDOW_MS })
         } else {
             record.count++
         }
