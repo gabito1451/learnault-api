@@ -6,7 +6,7 @@ The Shared Kernel contains components that are universally accessible to all dom
 
 ## Shared Kernel Structure
 
-```
+```plaintext
 src/shared/
 ├── config/           # Configuration and environment
 │   ├── database.ts   # Prisma client export
@@ -535,7 +535,7 @@ import { emailService } from '@/shared/messaging/email.service'
 
 ### ❌ Forbidden
 
-```typescript
+```typescripttypescript
 // Shared CANNOT import from domains
 import { UserService } from '@/domains/users/user.service' // ❌
 import { RewardService } from '@/domains/rewards/reward.service' // ❌
@@ -558,7 +558,7 @@ import { RewardService } from '@/domains/rewards/reward.service' // ❌
 
 Current → Target structure:
 
-```
+```plaintext
 src/config/           → src/shared/config/
 src/utils/errors.ts   → src/shared/errors/
 src/middleware/       → src/shared/middleware/

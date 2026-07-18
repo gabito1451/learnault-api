@@ -508,7 +508,7 @@ Centralized API gateway for:
 
 ### Current State (Pre-refactoring)
 
-```
+```plaintext
 src/
 ├── controllers/      # Flat controller structure
 ├── services/         # Flat service structure
@@ -519,7 +519,7 @@ src/
 
 ### Target State (Domain-driven)
 
-```
+```plaintext
 src/
 ├── domains/          # Bounded contexts
 │   └── [domain]/
