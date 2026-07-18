@@ -267,7 +267,7 @@ pnpm test integrations/architecture/domain-boundaries.test.ts
 
 ## File Structure Created
 
-```
+```plaintext
 docs/
 ├── ARCHITECTURE.md                          # ✅ Main architecture doc
 └── domains/

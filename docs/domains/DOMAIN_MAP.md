@@ -2,7 +2,7 @@
 
 ## Visual Domain Architecture
 
-```
+```plaintext
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                              CLIENT LAYER                                │
 │                     (Web App, Mobile App, CLI)                           │
@@ -79,7 +79,7 @@
 
 ### Allowed Dependencies (→ means "can call/use")
 
-```
+```plaintext
 ┌──────────────┐
 │   Identity   │───────┐
 └──────────────┘       │
@@ -109,7 +109,7 @@
 
 ### Forbidden Dependencies (❌)
 
-```
+```plaintext
 Identity ❌→ Learning, Rewards, Credentials, etc.
 Learning ❌→ Rewards, Credentials, Notifications
 Rewards  ❌→ Learning, Credentials, Referrals
@@ -160,7 +160,7 @@ Infrastructure ❌→ Any Domain
 
 #### 1. User Registration Chain
 
-```
+```plaintext
 UserRegistered (Identity)
   ├─→ ProfileInitialized (Users)
   ├─→ ReferralChecked (Referrals)
@@ -169,7 +169,7 @@ UserRegistered (Identity)
 
 #### 2. Module Completion Chain
 
-```
+```plaintext
 ModuleCompleted (Learning)
   ├─→ RewardCalculated (Rewards)
   │     ├─→ PaymentProcessed (Blockchain)
@@ -184,7 +184,7 @@ ModuleCompleted (Learning)
 
 #### 3. Withdrawal Chain
 
-```
+```plaintext
 WithdrawalRequested (Rewards)
   ├─→ PaymentProcessed (Blockchain)
   ├─→ WithdrawalNotification (Notifications)
@@ -197,7 +197,7 @@ WithdrawalRequested (Rewards)
 
 ### Current Structure (Before Refactoring)
 
-```
+```plaintext
 src/
 ├── controllers/          # 9 controllers (flat)
 ├── services/             # 6 services (flat)
@@ -211,7 +211,7 @@ src/
 
 ### Target Structure (Domain-Driven)
 
-```
+```plaintext
 src/
 ├── domains/
 │   ├── identity/

@@ -433,7 +433,7 @@ This document defines the bounded contexts, responsibilities, public interfaces,
 
 ### Allowed Import Patterns
 
-```
+```plaintext
 ✅ Any domain → Shared Kernel
 ✅ Any domain → Infrastructure (database, blockchain, messaging)
 ✅ Any domain → Identity domain (for auth context)
@@ -442,7 +442,7 @@ This document defines the bounded contexts, responsibilities, public interfaces,
 
 ### Forbidden Import Patterns
 
-```
+```plaintext
 ❌ Domain A → Domain B directly (controller/service imports)
 ❌ Circular dependencies between domains
 ❌ Infrastructure → Business domains

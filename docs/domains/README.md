@@ -77,7 +77,7 @@ This directory contains comprehensive documentation for the Learnault API domain
 
 ### ✅ Allowed
 
-```
+```plaintext
 Domain → Shared Kernel
 Domain → Infrastructure
 Domain → Identity (for auth context)
@@ -86,7 +86,7 @@ Domain A ← Domain B (via events only)
 
 ### ❌ Forbidden
 
-```
+```plaintext
 Domain A → Domain B (direct import)
 Infrastructure → Domain
 Shared Kernel → Domain
@@ -131,7 +131,7 @@ Tests verify:
 
 ## File Structure
 
-```
+```plaintext
 docs/domains/
 ├── README.md                        # This file
 ├── IMPLEMENTATION_SUMMARY.md        # Overview and acceptance criteria

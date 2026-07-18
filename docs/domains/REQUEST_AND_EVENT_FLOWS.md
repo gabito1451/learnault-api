@@ -24,7 +24,7 @@ This document maps the key request flows and domain event propagation patterns a
 
 ### Request Flow
 
-```
+```plaintext
 Client
   ↓ POST /api/v1/auth/register { email, username, password }
 Identity Domain (AuthController)
@@ -40,7 +40,7 @@ Client
 
 ### Domain Event Flow
 
-```
+```plaintext
 Identity Domain
   ↓ Event: UserRegistered { userId, email, role, timestamp }
   ├─→ Users Domain (event handler)
@@ -76,7 +76,7 @@ Identity Domain
 
 ### Request Flow
 
-```
+```plaintext
 Client
   ↓ POST /api/v1/auth/login { email, password }
 Identity Domain (AuthController)
@@ -92,7 +92,7 @@ Client
 
 ### Domain Event Flow
 
-```
+```plaintext
 Identity Domain
   ↓ Event: UserLoggedIn { userId, timestamp } [Optional]
   └─→ Analytics/Audit Service (future)
@@ -116,7 +116,7 @@ Identity Domain
 
 ### Request Flow
 
-```
+```plaintext
 Client
   ↓ POST /api/v1/modules/:id/complete { score }
 Learning Domain (ModuleController)
@@ -131,7 +131,7 @@ Client
 
 ### Domain Event Flow
 
-```
+```plaintext
 Learning Domain
   ↓ Event: ModuleCompleted { userId, moduleId, score, timestamp }
   │
@@ -193,7 +193,7 @@ All downstream actions are decoupled via event handlers.
 
 ### Request Flow (Direct API Call)
 
-```
+```plaintext
 Client
   ↓ POST /api/v1/rewards/claim { moduleId, walletAddress, referralCode? }
 Rewards Domain (RewardController)
@@ -211,7 +211,7 @@ Client
 
 ### Domain Event Flow
 
-```
+```plaintext
 Rewards Domain
   ↓ Event: RewardClaimed { userId, moduleId, amount, breakdown, txHash, timestamp }
   │
@@ -243,7 +243,7 @@ Rewards Domain
 
 ### Request Flow (Direct API Call)
 
-```
+```plaintext
 Client
   ↓ POST /api/v1/credentials/issue { moduleId }
 Credentials Domain (CredentialController)
@@ -259,7 +259,7 @@ Client
 
 ### Domain Event Flow
 
-```
+```plaintext
 Credentials Domain
   ↓ Event: CredentialIssued { credentialId, userId, moduleId, onChainId, timestamp }
   │
@@ -286,7 +286,7 @@ Credentials Domain
 
 ### Request Flow
 
-```
+```plaintext
 Client
   ↓ POST /api/v1/referrals/apply { code }
 Referrals Domain (ReferralController)
@@ -301,7 +301,7 @@ Client
 
 ### Domain Event Flow
 
-```
+```plaintext
 Referrals Domain
   ↓ Event: ReferralApplied { referrerId, referreeId, code, timestamp }
   │
@@ -314,7 +314,7 @@ Referrals Domain
 
 When referree completes first module:
 
-```
+```plaintext
 Learning Domain
   ↓ Event: ModuleCompleted { userId: referreeId, ... }
   ↓
@@ -344,7 +344,7 @@ Rewards Domain (event handler)
 
 ### Request Flow
 
-```
+```plaintext
 Client
   ↓ POST /api/v1/rewards/withdraw { walletAddress, amount, memo? }
 Rewards Domain (RewardController)
@@ -361,7 +361,7 @@ Client
 
 ### Domain Event Flow
 
-```
+```plaintext
 Rewards Domain
   ↓ Event: WithdrawalProcessed { userId, amount, walletAddress, txHash, timestamp }
   │
@@ -393,7 +393,7 @@ Domain events or direct API calls
 
 ### Event-Driven Flow
 
-```
+```plaintext
 Source Domain
   ↓ Publish DomainEvent (e.g., RewardClaimed)
   ↓
@@ -410,7 +410,7 @@ Notifications Domain (event handler)
 
 ### Direct API Flow
 
-```
+```plaintext
 Client
   ↓ POST /api/v1/notifications/register-device { token, platform }
 Notifications Domain (NotificationController)

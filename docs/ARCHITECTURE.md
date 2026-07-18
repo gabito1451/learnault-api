@@ -16,7 +16,7 @@ Learnault API is built using **Domain-Driven Design (DDD)** principles with clea
 
 ## System Structure
 
-```
+```plaintext
 learnault-api/
 ├── src/
 │   ├── domains/              # Business domains (bounded contexts)
@@ -143,7 +143,7 @@ Infrastructure provides technical capabilities without business logic:
 
 ### ✅ Allowed Dependencies
 
-```
+```plaintext
 Domain → Shared Kernel ✅
 Domain → Infrastructure ✅
 Domain → Identity (for auth context) ✅
@@ -152,7 +152,7 @@ Domain A ← Domain B (via events only) ✅
 
 ### ❌ Forbidden Dependencies
 
-```
+```plaintext
 Domain A → Domain B (direct import) ❌
 Infrastructure → Domain ❌
 Shared Kernel → Domain ❌
@@ -177,7 +177,7 @@ Circular dependencies ❌
 
 Each domain follows this structure:
 
-```
+```plaintext
 domains/[domain-name]/
 ├── controllers/          # HTTP request handlers
 │   └── [domain].controller.ts
@@ -204,7 +204,7 @@ domains/[domain-name]/
 
 ### Standard HTTP Request
 
-```
+```plaintext
 Client
   ↓ HTTP Request
 Express App (app.ts)
@@ -226,7 +226,7 @@ Client
 
 ### Event-Driven Flow
 
-```
+```plaintext
 Domain A
   ↓ Business logic executed
   ↓ Publish DomainEvent
