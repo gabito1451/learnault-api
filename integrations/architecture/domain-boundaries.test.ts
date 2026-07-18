@@ -204,7 +204,7 @@ describe('Architecture: Domain Boundaries', () => {
           ).join('\n')
 
           throw new Error(
-            `Domain boundary violation detected!\n\n` +
+            'Domain boundary violation detected!\n\n' +
             `Domain '${from}' has forbidden imports:\n${violationDetails}\n\n` +
             `Forbidden domains: ${cannot.join(', ')}`
           )
@@ -246,7 +246,7 @@ describe('Architecture: Domain Boundaries', () => {
         ).join('\n')
 
         throw new Error(
-          `Infrastructure layer violation detected!\n\n` +
+          'Infrastructure layer violation detected!\n\n' +
           `Infrastructure files have forbidden domain imports:\n${violationDetails}`
         )
       }
@@ -286,9 +286,9 @@ describe('Architecture: Domain Boundaries', () => {
         ).join('\n')
 
         throw new Error(
-          `Shared kernel violation detected!\n\n` +
+          'Shared kernel violation detected!\n\n' +
           `Shared kernel files have forbidden domain imports:\n${violationDetails}\n\n` +
-          `The shared kernel must not depend on any business domain.`
+          'The shared kernel must not depend on any business domain.'
         )
       }
 
@@ -342,7 +342,7 @@ describe('Architecture: Domain Boundaries', () => {
         const details = circularDeps.map(([a, b]) => `  - ${a} ↔ ${b}`).join('\n')
         throw new Error(
           `Circular dependencies detected between domains:\n${details}\n\n` +
-          `Domains should not have circular dependencies.`
+          'Domains should not have circular dependencies.'
         )
       }
 
