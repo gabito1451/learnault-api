@@ -31,8 +31,12 @@ vi.mock('../src/config/stellar', () => ({
   stellarConfig: {
     network: 'testnet',
     funding: {
-      get amount() { return mockConfigAmount() },
-      get minBalance() { return mockConfigMinBalance() },
+      get amount() {
+ return mockConfigAmount() 
+},
+      get minBalance() {
+ return mockConfigMinBalance() 
+},
       maxRetries: 5,
       backoffBaseMinutes: 5,
     },

@@ -36,7 +36,8 @@ export class StellarFundingService {
       this.processQueue().catch((err) =>
         logger.error('[StellarFundingService] Queue processing error:', err)
       )
-      return existing as unknown as StellarFundingRecord
+      
+return existing as unknown as StellarFundingRecord
     }
 
     const funding = await prisma.stellarFunding.create({
@@ -77,7 +78,8 @@ export class StellarFundingService {
 
     if (record.status === 'submitted') {
       await this.reconcile(record)
-      return
+      
+return
     }
 
     const alreadyFunded = await this.checkAlreadyFunded(record)
@@ -86,7 +88,8 @@ export class StellarFundingService {
     const sourceSecret = process.env.STELLAR_FUNDING_SOURCE_SECRET
     if (!sourceSecret) {
       await this.handleFailure(record, 'Funding source secret not configured')
-      return
+      
+return
     }
 
     try {
@@ -112,7 +115,8 @@ export class StellarFundingService {
               error: 'Transaction submitted, awaiting confirmation',
             },
           })
-          return
+          
+return
         }
 
         if (
@@ -120,7 +124,8 @@ export class StellarFundingService {
           this.isInsufficientFundsError(err)
         ) {
           await this.handleFailure(record, 'Insufficient funding source balance')
-          return
+          
+return
         }
       }
 
@@ -144,7 +149,8 @@ export class StellarFundingService {
             record.transactionHash,
             record.ledger ?? undefined
           )
-          return
+          
+return
         }
       } catch {
         // verification failed, fall through to retry
@@ -166,12 +172,14 @@ export class StellarFundingService {
       )
       if (parseFloat(balance) >= parseFloat(stellarConfig.funding.minBalance)) {
         await this.markConfirmed(record)
-        return true
+        
+return true
       }
     } catch {
       // balance check failed, continue to submit
     }
-    return false
+    
+return false
   }
 
   private async markConfirmed(
@@ -226,7 +234,8 @@ export class StellarFundingService {
   private isInsufficientFundsError(err: StellarServiceError): boolean {
     const causeMessage =
       err.cause instanceof Error ? err.cause.message : String(err.cause ?? '')
-    return (
+    
+return (
       causeMessage.includes('op_underfunded') ||
       causeMessage.includes('insufficient')
     )
