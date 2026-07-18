@@ -501,6 +501,7 @@ export class AuthController {
             const validation = forgotPasswordSchema.safeParse(req.body)
             if (!validation.success) {
                 res.status(200).json({ message: 'If the account exists, a password reset email has been sent.' })
+
                 return
             }
 
@@ -513,22 +514,26 @@ export class AuthController {
 
             if (this.isRateLimited(`reset:ip:${ip}`, RESET_PASSWORD_COOLDOWN_MS)) {
                 res.status(429).json({ error: 'Too many requests. Please try again later.' })
+
                 return
             }
 
             const user = await prisma.user.findUnique({ where: { email } })
             if (!user) {
                 res.status(200).json({ message: 'If the account exists, a password reset email has been sent.' })
+
                 return
             }
 
             if (this.isResetPasswordAccountLimited(user.id)) {
                 res.status(429).json({ error: 'Too many requests. Please try again later.' })
+
                 return
             }
 
             if (this.isRateLimited(`reset:user:${user.id}`, RESET_PASSWORD_COOLDOWN_MS)) {
                 res.status(429).json({ error: 'Too many requests. Please try again later.' })
+
                 return
             }
 
@@ -588,6 +593,7 @@ export class AuthController {
             const validation = resetPasswordSchema.safeParse(req.body)
             if (!validation.success) {
                 res.status(400).json({ error: 'Invalid token or password' })
+
                 return
             }
 
@@ -595,6 +601,7 @@ export class AuthController {
 
             if (!/^[0-9a-f]{64}$/i.test(token)) {
                 res.status(400).json({ error: 'Invalid token' })
+
                 return
             }
 
@@ -607,11 +614,13 @@ export class AuthController {
 
             if (!resetToken) {
                 res.status(400).json({ error: 'Invalid token' })
+
                 return
             }
 
             if (resetToken.status === 'USED' || resetToken.status === 'REVOKED') {
                 res.status(400).json({ error: 'Invalid token' })
+
                 return
             }
 
@@ -621,6 +630,7 @@ export class AuthController {
                     data: { status: 'REVOKED' },
                 })
                 res.status(400).json({ error: 'Token expired' })
+
                 return
             }
 
