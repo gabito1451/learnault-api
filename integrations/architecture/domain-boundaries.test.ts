@@ -175,7 +175,7 @@ describe('Architecture: Domain Boundaries', () => {
     const allFiles = findTsFiles(srcDir)
 
     FORBIDDEN_IMPORTS.forEach(({ from, cannot }) => {
-      test(`Domain "${from}" should not import from forbidden domains: ${cannot.join(', ')}`, () => {
+      test(`Domain '${from}' should not import from forbidden domains: ${cannot.join(', ')}`, () => {
         const violations: Array<{ file: string; importPath: string; targetDomain: string }> = []
 
         allFiles.forEach(file => {
@@ -200,12 +200,12 @@ describe('Architecture: Domain Boundaries', () => {
 
         if (violations.length > 0) {
           const violationDetails = violations.map(v => 
-            `  - ${v.file} imports from ${v.targetDomain}: "${v.importPath}"`
+            `  - ${v.file} imports from ${v.targetDomain}: '${v.importPath}'`
           ).join('\n')
 
           throw new Error(
             `Domain boundary violation detected!\n\n` +
-            `Domain "${from}" has forbidden imports:\n${violationDetails}\n\n` +
+            `Domain '${from}' has forbidden imports:\n${violationDetails}\n\n` +
             `Forbidden domains: ${cannot.join(', ')}`
           )
         }
@@ -242,7 +242,7 @@ describe('Architecture: Domain Boundaries', () => {
 
       if (violations.length > 0) {
         const violationDetails = violations.map(v => 
-          `  - ${v.file} imports from ${v.targetDomain}: "${v.importPath}"`
+          `  - ${v.file} imports from ${v.targetDomain}: '${v.importPath}'`
         ).join('\n')
 
         throw new Error(
@@ -282,7 +282,7 @@ describe('Architecture: Domain Boundaries', () => {
 
       if (violations.length > 0) {
         const violationDetails = violations.map(v => 
-          `  - ${v.file} imports from ${v.targetDomain}: "${v.importPath}"`
+          `  - ${v.file} imports from ${v.targetDomain}: '${v.importPath}'`
         ).join('\n')
 
         throw new Error(
