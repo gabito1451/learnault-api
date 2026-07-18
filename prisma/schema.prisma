@@ -29,8 +29,56 @@ model User {
   referredBy      Referral?      @relation("Referree")
   verificationTokens VerificationToken[]
   emailDeliveries EmailDelivery[]
+  learnerPreference LearnerPreference?
+  preferenceAuditLogs PreferenceAuditLog[]
 
   @@map("users")
+}
+
+model LearnerPreference {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Locale & regional
+  locale              String   @default("en-US")
+  timezone            String   @default("UTC")
+
+  // Connectivity
+  lowDataMode         Boolean  @default(false)
+
+  // Accessibility
+  highContrast        Boolean  @default(false)
+  reduceMotion        Boolean  @default(false)
+  screenReaderOptimized Boolean @default(false)
+  textSize            String   @default("medium") // small, medium, large, extra_large
+
+  // Content
+  preferredDifficulty String   @default("beginner") // beginner, intermediate, advanced
+  preferredCategories String[] @default([])
+
+  // Privacy (authoritative source for privacy-impacting preferences)
+  profileVisibility   String   @default("public") // public, private, connections
+  analyticsConsent    Boolean  @default(false)
+  dataSharingConsent  Boolean  @default(false)
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("learner_preferences")
+}
+
+model PreferenceAuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  field     String
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("preference_audit_logs")
 }
 
 model VerificationToken {
