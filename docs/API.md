@@ -19,7 +19,7 @@ The Learnault API is a JSON REST API for a decentralized learn-to-earn platform 
 
 Obtain a JWT from `POST /auth/login`. Pass it on every protected request:
 
-```
+```http
 Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 ```
 
@@ -70,7 +70,7 @@ Validation errors from the `validate()` middleware:
 
 Every response includes:
 
-```
+```http
 X-RateLimit-Limit: 100
 X-RateLimit-Remaining: 97
 X-RateLimit-Reset: 2026-07-19T10:15:00.000Z
@@ -78,7 +78,7 @@ X-RateLimit-Reset: 2026-07-19T10:15:00.000Z
 
 When exceeded (HTTP 429):
 
-```
+```http
 Retry-After: 60
 ```
 
