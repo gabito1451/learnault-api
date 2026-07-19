@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express'
 
 import jwt from 'jsonwebtoken'
+import prisma from '../config/database'
 
 export type UserRole = 'learner' | 'employer';
 
@@ -87,6 +88,59 @@ export const optionalAuthenticate = (
      } catch { /** */ }
 
      next()
+}
+
+/**
+ * Account-status gate — must be used after `authenticate`.
+ * JWTs are stateless, so tokens issued before deactivation or a deletion
+ * request stay verifiable until expiry; this middleware checks the current
+ * account status in the database and only lets ACTIVE accounts through.
+ */
+export const requireActiveAccount = async (
+     req: Request,
+     res: Response,
+     next: NextFunction
+): Promise<void> => {
+     if (!req.user) {
+          res.status(401).json({ message: 'Authentication required' })
+
+          return
+     }
+
+     try {
+          const user = await prisma.user.findUnique({
+               where: { id: req.user.id },
+               select: { status: true },
+          })
+
+          if (!user || user.status === 'DELETED') {
+               res.status(401).json({ message: 'Account not found' })
+
+               return
+          }
+
+          if (user.status === 'DEACTIVATED') {
+               res.status(403).json({
+                    message: 'Account is deactivated',
+                    code: 'ACCOUNT_DEACTIVATED',
+               })
+
+               return
+          }
+
+          if (user.status === 'PENDING_DELETION') {
+               res.status(403).json({
+                    message: 'Account is scheduled for deletion',
+                    code: 'ACCOUNT_PENDING_DELETION',
+               })
+
+               return
+          }
+
+          next()
+     } catch {
+          res.status(500).json({ message: 'Internal server error during account status check' })
+     }
 }
 
 /**

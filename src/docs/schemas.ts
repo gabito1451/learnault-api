@@ -405,3 +405,109 @@
  *             verification:
  *               type: object
  */
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     DataExportRequest:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         status:
+ *           type: string
+ *           enum: [pending, processing, ready, failed, expired]
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *         completedAt:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *         expiresAt:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *         downloadedAt:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *
+ *     AccountDeletionRequest:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         status:
+ *           type: string
+ *           enum: [pending, processing, completed, cancelled, failed]
+ *         scheduledFor:
+ *           type: string
+ *           format: date-time
+ *         cancelledAt:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *         completedAt:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *
+ *     DeactivateInput:
+ *       type: object
+ *       required: [password]
+ *       properties:
+ *         password:
+ *           type: string
+ *           description: Current password (step-up re-authentication)
+ *
+ *     ReactivateInput:
+ *       type: object
+ *       required: [email, password]
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *         password:
+ *           type: string
+ *
+ *     RequestDeletionInput:
+ *       type: object
+ *       required: [password]
+ *       properties:
+ *         password:
+ *           type: string
+ *           description: Current password (step-up re-authentication)
+ *         reason:
+ *           type: string
+ *           maxLength: 500
+ *
+ *     CancelDeletionInput:
+ *       type: object
+ *       required: [email, password]
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *         password:
+ *           type: string
+ *
+ *     AccountStatusError:
+ *       type: object
+ *       properties:
+ *         error:
+ *           type: string
+ *         code:
+ *           type: string
+ *           enum: [ACCOUNT_DEACTIVATED, ACCOUNT_PENDING_DELETION, STEP_UP_FAILED]
+ *         scheduledFor:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ */

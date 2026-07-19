@@ -18,4 +18,9 @@ export const env = {
 
   RATE_LIMIT_AUTHENTICATED_WINDOW_MS: parseInt(process.env.RATE_LIMIT_AUTHENTICATED_WINDOW_MS || '900000', 10), // 15 minutes
   RATE_LIMIT_AUTHENTICATED_MAX: parseInt(process.env.RATE_LIMIT_AUTHENTICATED_MAX || '1000', 10),
+
+  // Account lifecycle configurations
+  DELETION_COOLING_OFF_DAYS: parseInt(process.env.DELETION_COOLING_OFF_DAYS || '30', 10),
+  EXPORT_TTL_DAYS: parseInt(process.env.EXPORT_TTL_DAYS || '7', 10),
+  LIFECYCLE_SWEEP_INTERVAL_MS: parseInt(process.env.LIFECYCLE_SWEEP_INTERVAL_MS || '0', 10), // 0 = disabled
 }

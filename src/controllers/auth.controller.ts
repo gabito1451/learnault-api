@@ -439,6 +439,37 @@ export class AuthController {
                 return
             }
 
+            if (user.status === 'DELETED') {
+                // Tombstoned account — indistinguishable from unknown credentials
+                res.status(401).json({ error: 'Invalid credentials' })
+
+                return
+            }
+
+            if (user.status === 'DEACTIVATED') {
+                res.status(403).json({
+                    error: 'Account is deactivated',
+                    code: 'ACCOUNT_DEACTIVATED',
+                })
+
+                return
+            }
+
+            if (user.status === 'PENDING_DELETION') {
+                const deletionRequest = await prisma.accountDeletionRequest.findFirst({
+                    where: { userId: user.id, status: 'pending' },
+                    select: { scheduledFor: true },
+                })
+
+                res.status(403).json({
+                    error: 'Account is scheduled for deletion',
+                    code: 'ACCOUNT_PENDING_DELETION',
+                    scheduledFor: deletionRequest?.scheduledFor ?? null,
+                })
+
+                return
+            }
+
             await prisma.user.update({
                 where: { id: user.id },
                 data: { lastLoginAt: new Date() }
