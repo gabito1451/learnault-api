@@ -25,6 +25,7 @@ export class NotificationController {
    * @openapi
    * /notifications/devices:
    *   post:
+   *     operationId: notificationsRegisterDevice
    *     summary: Register a device token for push notifications
    *     tags: [Notifications]
    *     security:
@@ -34,24 +35,22 @@ export class NotificationController {
    *       content:
    *         application/json:
    *           schema:
-   *             type: object
-   *             required:
-   *               - token
-   *               - platform
-   *             properties:
-   *               token:
-   *                 type: string
-   *                 description: Firebase device token
-   *               platform:
-   *                 type: string
-   *                 enum: [ios, android, web]
+   *             $ref: '#/components/schemas/RegisterDeviceInput'
    *     responses:
    *       201:
    *         description: Device token registered successfully
    *       400:
    *         description: Validation failed
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   async registerDevice(req: Request, res: Response): Promise<void> {
     try {
@@ -89,7 +88,8 @@ export class NotificationController {
    * @openapi
    * /notifications/preferences:
    *   patch:
-   *     summary: Update notification preferences
+   *     operationId: notificationsUpdatePreferences
+   *     summary: Update push notification preferences
    *     tags: [Notifications]
    *     security:
    *       - bearerAuth: []
@@ -98,21 +98,22 @@ export class NotificationController {
    *       content:
    *         application/json:
    *           schema:
-   *             type: object
-   *             properties:
-   *               rewardReceipt:
-   *                 type: boolean
-   *               quizPassFail:
-   *                 type: boolean
-   *               streakReminders:
-   *                 type: boolean
+   *             $ref: '#/components/schemas/NotificationPreferencesInput'
    *     responses:
    *       200:
    *         description: Preferences updated successfully
    *       400:
-   *         description: Validation failed
+   *         description: Validation failed — at least one preference field required
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   async updatePreferences(req: Request, res: Response): Promise<void> {
     try {
@@ -149,7 +150,8 @@ export class NotificationController {
    * @openapi
    * /notifications/delivery-status:
    *   get:
-   *     summary: Get notification delivery status logs for the authenticated user
+   *     operationId: notificationsGetDeliveryStatus
+   *     summary: Get notification delivery log for the authenticated user
    *     tags: [Notifications]
    *     security:
    *       - bearerAuth: []
@@ -159,6 +161,7 @@ export class NotificationController {
    *         schema:
    *           type: integer
    *           default: 20
+   *           maximum: 100
    *       - in: query
    *         name: status
    *         schema:
@@ -167,8 +170,23 @@ export class NotificationController {
    *     responses:
    *       200:
    *         description: Delivery logs retrieved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/NotificationLog'
+   *                 count:
+   *                   type: integer
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   async getDeliveryStatus(req: Request, res: Response): Promise<void> {
     try {

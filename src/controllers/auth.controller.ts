@@ -81,8 +81,10 @@ export class AuthController {
      * @openapi
      * /auth/register:
      *   post:
+     *     operationId: authRegister
      *     summary: Register a new user
      *     tags: [Auth]
+     *     security: []
      *     requestBody:
      *       required: true
      *       content:
@@ -91,17 +93,29 @@ export class AuthController {
      *             $ref: '#/components/schemas/RegisterInput'
      *     responses:
      *       201:
-     *         description: User registered successfully
+     *         description: User registered successfully; a verification email is queued.
      *         content:
      *           application/json:
      *             schema:
      *               $ref: '#/components/schemas/AuthResponse'
      *       400:
      *         description: Validation failed
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      *       409:
-     *         description: User already exists
+     *         description: Email or username already taken
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      *       500:
      *         description: Internal server error
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      */
     async register(req: Request, res: Response): Promise<void> {
         try {
@@ -184,8 +198,10 @@ export class AuthController {
      * @openapi
      * /auth/verify-email:
      *   post:
+     *     operationId: authVerifyEmail
      *     summary: Verify email address with a token
      *     tags: [Auth]
+     *     security: []
      *     requestBody:
      *       required: true
      *       content:
@@ -194,13 +210,19 @@ export class AuthController {
      *             $ref: '#/components/schemas/VerifyEmailInput'
      *     responses:
      *       200:
-     *         description: Email verified successfully
+     *         description: Email verified (or already verified)
      *       400:
-     *         description: Invalid or malformed token
-     *       410:
-     *         description: Token expired or already used
+     *         description: Invalid or expired token
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      *       500:
      *         description: Internal server error
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      */
     async verifyEmail(req: Request, res: Response): Promise<void> {
         try {
@@ -280,8 +302,13 @@ export class AuthController {
      * @openapi
      * /auth/resend-verification:
      *   post:
+     *     operationId: authResendVerification
      *     summary: Resend verification email
+     *     description: >
+     *       Always returns 200 with a neutral message to avoid leaking user existence.
+     *       Rate-limited by IP (1 req/min) and per account (5 req/24 h).
      *     tags: [Auth]
+     *     security: []
      *     requestBody:
      *       required: true
      *       content:
@@ -290,11 +317,19 @@ export class AuthController {
      *             $ref: '#/components/schemas/ResendVerificationInput'
      *     responses:
      *       200:
-     *         description: If the account exists, a verification email will be sent
+     *         description: If the account exists, a verification email will be sent.
      *       429:
-     *         description: Too many requests
+     *         description: Too many requests — IP or account rate limit reached.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      *       500:
      *         description: Internal server error
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      */
     async resendVerification(req: Request, res: Response): Promise<void> {
         try {
@@ -386,8 +421,11 @@ export class AuthController {
      * @openapi
      * /auth/login:
      *   post:
-     *     summary: Login a user
+     *     operationId: authLogin
+     *     summary: Log in and receive a JWT
+     *     description: Rate-limited to 10 requests per 15 minutes per IP.
      *     tags: [Auth]
+     *     security: []
      *     requestBody:
      *       required: true
      *       content:
@@ -403,10 +441,22 @@ export class AuthController {
      *               $ref: '#/components/schemas/AuthResponse'
      *       400:
      *         description: Validation failed
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      *       401:
      *         description: Invalid credentials
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      *       500:
      *         description: Internal server error
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      */
     async login(req: Request, res: Response): Promise<void> {
         try {
@@ -466,11 +516,16 @@ export class AuthController {
      * @openapi
      * /auth/logout:
      *   post:
-     *     summary: Logout user
+     *     operationId: authLogout
+     *     summary: Log out (stateless — client must discard the token)
+     *     description: >
+     *       The server has no session state; this endpoint simply returns a
+     *       reminder to clear the token client-side.
      *     tags: [Auth]
+     *     security: []
      *     responses:
      *       200:
-     *         description: Logged out successfully
+     *         description: Logged out successfully.
      */
     async logout(req: Request, res: Response): Promise<void> {
         res.status(200).json({ message: 'Logged out successfully. Please clear your token client-side.' })
@@ -480,8 +535,13 @@ export class AuthController {
      * @openapi
      * /auth/forgot-password:
      *   post:
-     *     summary: Request a password reset email
+     *     operationId: authForgotPassword
+     *     summary: Request a password-reset email
+     *     description: >
+     *       Always returns 200 to avoid leaking user existence.
+     *       Token expires in 30 minutes. Rate-limited by IP and per account.
      *     tags: [Auth]
+     *     security: []
      *     requestBody:
      *       required: true
      *       content:
@@ -490,11 +550,19 @@ export class AuthController {
      *             $ref: '#/components/schemas/ForgotPasswordInput'
      *     responses:
      *       200:
-     *         description: If the account exists, a password reset email will be sent
+     *         description: If the account exists, a password reset email will be sent.
      *       429:
-     *         description: Too many requests
+     *         description: Too many requests.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      *       500:
      *         description: Internal server error
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      */
     async forgotPassword(req: Request, res: Response): Promise<void> {
         try {
@@ -572,8 +640,13 @@ export class AuthController {
      * @openapi
      * /auth/reset-password:
      *   post:
-     *     summary: Reset password with a token
+     *     operationId: authResetPassword
+     *     summary: Reset password using a token from the reset email
+     *     description: >
+     *       On success, all existing sessions are revoked and all pending
+     *       verification tokens are cancelled.
      *     tags: [Auth]
+     *     security: []
      *     requestBody:
      *       required: true
      *       content:
@@ -582,11 +655,19 @@ export class AuthController {
      *             $ref: '#/components/schemas/ResetPasswordInput'
      *     responses:
      *       200:
-     *         description: Password reset successful
+     *         description: Password reset successful.
      *       400:
-     *         description: Invalid token or password
+     *         description: Invalid, expired, or already-used token; or weak password.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      *       500:
      *         description: Internal server error
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      */
     async resetPassword(req: Request, res: Response): Promise<void> {
         try {

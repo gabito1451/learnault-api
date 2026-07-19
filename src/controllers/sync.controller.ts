@@ -34,7 +34,12 @@ export class SyncController {
    * @openapi
    * /sync/progress:
    *   post:
+   *     operationId: syncProgress
    *     summary: Upload batched offline progress events
+   *     description: >
+   *       Each event is deduplicated by `idempotencyKey`. Events with a stale
+   *       `syncVersion` (lower than the latest already applied for that module)
+   *       are silently skipped.
    *     tags: [Sync]
    *     security:
    *       - bearerAuth: []
@@ -49,15 +54,26 @@ export class SyncController {
    *               events:
    *                 type: array
    *                 items:
-   *                   type: object
-   *                   required: [idempotencyKey, deviceId, moduleId, progressPercent, clientTimestamp, syncVersion]
+   *                   $ref: '#/components/schemas/SyncProgressEvent'
    *     responses:
    *       200:
-   *         description: Sync results per item
+   *         description: Per-event sync results
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/SyncResponse'
    *       400:
-   *         description: Invalid payload
+   *         description: Invalid payload (e.g. empty events array)
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   syncProgress = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = (req as any).user?.id
@@ -128,7 +144,12 @@ export class SyncController {
    * @openapi
    * /sync/completions:
    *   post:
+   *     operationId: syncCompletions
    *     summary: Reconcile offline quiz/completion attempts
+   *     description: >
+   *       Each event is deduplicated by `idempotencyKey`. If the user already has a
+   *       completion with an equal or higher score, the event is skipped. A higher
+   *       score updates the existing record.
    *     tags: [Sync]
    *     security:
    *       - bearerAuth: []
@@ -143,15 +164,26 @@ export class SyncController {
    *               events:
    *                 type: array
    *                 items:
-   *                   type: object
-   *                   required: [idempotencyKey, deviceId, moduleId, score, clientTimestamp, syncVersion]
+   *                   $ref: '#/components/schemas/SyncCompletionEvent'
    *     responses:
    *       200:
-   *         description: Per-item sync results
+   *         description: Per-event sync results
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/SyncResponse'
    *       400:
-   *         description: Invalid payload
+   *         description: Invalid payload (e.g. empty events array)
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   syncCompletions = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = (req as any).user?.id

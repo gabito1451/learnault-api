@@ -27,6 +27,30 @@ app.use('/api', routes)
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs))
 
 // Health check endpoint
+/**
+ * @openapi
+ * /health:
+ *   get:
+ *     operationId: healthCheck
+ *     summary: Service health check
+ *     description: Returns HTTP 200 when the server is running. No authentication required.
+ *     tags: [Health]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Service is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ */
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() })
 })

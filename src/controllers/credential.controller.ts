@@ -8,7 +8,8 @@ export class CredentialController {
    * @openapi
    * /credentials:
    *   get:
-   *     summary: Retrieve user credentials
+   *     operationId: credentialsList
+   *     summary: List credentials for the authenticated user
    *     tags: [Credentials]
    *     security:
    *       - bearerAuth: []
@@ -17,16 +18,17 @@ export class CredentialController {
    *         name: moduleId
    *         schema:
    *           type: string
+   *           format: uuid
    *       - in: query
    *         name: fromDate
    *         schema:
    *           type: string
-   *           format: date
+   *           format: date-time
    *       - in: query
    *         name: toDate
    *         schema:
    *           type: string
-   *           format: date
+   *           format: date-time
    *       - in: query
    *         name: page
    *         schema:
@@ -37,6 +39,7 @@ export class CredentialController {
    *         schema:
    *           type: integer
    *           default: 10
+   *           maximum: 100
    *     responses:
    *       200:
    *         description: Credentials retrieved successfully
@@ -46,6 +49,10 @@ export class CredentialController {
    *               $ref: '#/components/schemas/CredentialList'
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   getUserCredentials = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
@@ -141,7 +148,8 @@ export class CredentialController {
    * @openapi
    * /credentials/{id}:
    *   get:
-   *     summary: Get credential by ID
+   *     operationId: credentialsGetById
+   *     summary: Get a single credential by ID (must be owned by caller)
    *     tags: [Credentials]
    *     security:
    *       - bearerAuth: []
@@ -151,17 +159,31 @@ export class CredentialController {
    *         required: true
    *         schema:
    *           type: string
+   *           format: uuid
    *     responses:
    *       200:
-   *         description: Credential details retrieved successfully
+   *         description: Credential details
    *         content:
    *           application/json:
    *             schema:
-   *               $ref: '#/components/schemas/Credential'
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 data:
+   *                   $ref: '#/components/schemas/Credential'
    *       401:
-   *         description: Unauthorized
+   *         description: Unauthorized or credential belongs to another user
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    *       404:
    *         description: Credential not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   getCredentialById = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
@@ -231,23 +253,33 @@ export class CredentialController {
    * @openapi
    * /credentials/verify/{onChainId}:
    *   get:
-   *     summary: Verify a credential
+   *     operationId: credentialsVerify
+   *     summary: Publicly verify a credential by on-chain ID (or credential ID)
+   *     description: >
+   *       No authentication required. Looks up by `onChainId` first; falls back to
+   *       the credential's primary `id` if no on-chain record is found.
    *     tags: [Credentials]
+   *     security: []
    *     parameters:
    *       - in: path
    *         name: onChainId
    *         required: true
    *         schema:
    *           type: string
+   *         description: On-chain credential ID or the credential's database UUID.
    *     responses:
    *       200:
-   *         description: Credential verification status
+   *         description: Credential verification result
    *         content:
    *           application/json:
    *             schema:
    *               $ref: '#/components/schemas/VerificationResponse'
    *       404:
-   *         description: Credential not found
+   *         description: Credential not found or invalid
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   verifyCredential = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
