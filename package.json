@@ -27,6 +27,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:ci": "vitest run",
+    "test:integration": "vitest run --reporter=verbose tests/integration/",
+    "test:integration:watch": "vitest tests/integration/",
     "db:migrate": "prisma migrate dev",
     "seed": "tsx prisma/seed.ts",
     "seed:reset": "tsx prisma/seed.ts --reset",
