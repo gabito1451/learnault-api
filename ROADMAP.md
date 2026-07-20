@@ -56,7 +56,7 @@ Status baseline: 17 July 2026. The present schema supports users, flat modules, 
 - [~] Complete email/password or email/PIN registration and login using real persisted users and normalized responses.
 - [ ] Add `EmailVerificationToken`, `PasswordResetToken`, `RefreshSession`, and `LoginAttempt` models with expiry and revocation.
 - [ ] Add email verification, resend, forgot-password, reset-password, refresh-token rotation, logout-one-session, and logout-all-session endpoints.
-- [ ] Add phone/OTP challenge and verification models/endpoints only if retained in launch scope, with provider mocks and abuse limits.
+- [x] Add phone/OTP challenge and verification models/endpoints — retained in launch scope; see [`docs/decisions/0001-phone-otp-authentication.md`](docs/decisions/0001-phone-otp-authentication.md). Implemented with a hashed/expiring/attempt-limited `OtpChallenge` model, a provider-abstracted `SmsProvider` (mock only for now), and phone/IP/device abuse limits.
 - [ ] Add session/device listing and revocation endpoints.
 - [ ] Enforce verified-email, account status, role, password policy, token audience/issuer, and secret rotation rules.
 

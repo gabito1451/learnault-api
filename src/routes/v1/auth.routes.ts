@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { AuthController } from '../../controllers/auth.controller'
-import { authLimiter } from '../../middleware/rate-limit.middleware'
+import { authLimiter, otpLimiter } from '../../middleware/rate-limit.middleware'
+import { optionalAuthenticate } from '../../middleware/auth.middleware'
 
 const router: Router = Router()
 const authController = new AuthController()
@@ -53,5 +54,19 @@ router.post('/forgot-password', authLimiter, authController.forgotPassword.bind(
  * @access Public
  */
 router.post('/reset-password', authController.resetPassword.bind(authController))
+
+/**
+ * @route POST /api/v1/auth/otp/request
+ * @desc Request a phone OTP code (login if unauthenticated, phone verification if authenticated)
+ * @access Public (optional Bearer token)
+ */
+router.post('/otp/request', otpLimiter, optionalAuthenticate, authController.requestOtp.bind(authController))
+
+/**
+ * @route POST /api/v1/auth/otp/verify
+ * @desc Verify a phone OTP code (completes login if unauthenticated, phone verification if authenticated)
+ * @access Public (optional Bearer token)
+ */
+router.post('/otp/verify', otpLimiter, optionalAuthenticate, authController.verifyOtp.bind(authController))
 
 export default router

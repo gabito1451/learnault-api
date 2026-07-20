@@ -30,9 +30,22 @@ export const resetPasswordSchema = z.object({
     newPassword: z.string().min(8, 'Password must be at least 8 characters long'),
 })
 
+export const otpRequestSchema = z.object({
+    phone: z.string().min(1, 'Phone number is required'),
+    deviceId: z.string().min(1).optional(),
+})
+
+export const otpVerifySchema = z.object({
+    phone: z.string().min(1, 'Phone number is required'),
+    code: z.string().length(6, 'Code must be 6 digits'),
+    deviceId: z.string().min(1).optional(),
+})
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
 export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type OtpRequestInput = z.infer<typeof otpRequestSchema>;
+export type OtpVerifyInput = z.infer<typeof otpVerifySchema>;

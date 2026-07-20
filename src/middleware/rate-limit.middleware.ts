@@ -90,6 +90,16 @@ export const authLimiter = createRateLimiter(
   new WeakMap<Request, RateLimitData>()
 )
 
+// Strict limiter for phone OTP endpoints (request + verify)
+export const otpLimiter = createRateLimiter(
+  {
+    windowMs: env.RATE_LIMIT_OTP_WINDOW_MS,
+    max: env.RATE_LIMIT_OTP_MAX,
+  },
+  createStore(),
+  new WeakMap<Request, RateLimitData>()
+)
+
 // Employer-specific limiter with higher limits
 export const employerLimiter = createRateLimiter(
   {

@@ -164,6 +164,32 @@
  *           minLength: 8
  *           example: NewP@ss1
  *
+ *     OtpRequestInput:
+ *       type: object
+ *       required: [phone]
+ *       properties:
+ *         phone:
+ *           type: string
+ *           description: E.164 format (leading +, country code, no spaces).
+ *           example: '+2348012345678'
+ *         deviceId:
+ *           type: string
+ *           description: Optional client-generated device identifier, used for device-level rate limiting.
+ *
+ *     OtpVerifyInput:
+ *       type: object
+ *       required: [phone, code]
+ *       properties:
+ *         phone:
+ *           type: string
+ *           example: '+2348012345678'
+ *         code:
+ *           type: string
+ *           description: 6-digit code sent by SMS.
+ *           example: '123456'
+ *         deviceId:
+ *           type: string
+ *
  */
 
 /**

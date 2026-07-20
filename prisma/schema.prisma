@@ -14,6 +14,8 @@ model User {
   role            Role           @default(LEARNER)
   walletAddress   String?        @unique
   isVerified      Boolean        @default(false)
+  phone           String?        @unique
+  phoneVerifiedAt DateTime?
   status          String         @default("ACTIVE") // ACTIVE, DEACTIVATED, PENDING_DELETION, DELETED
   statusChangedAt DateTime?
   createdAt       DateTime       @default(now())
@@ -37,6 +39,7 @@ model User {
   audits          AuditLog[]
   dataExports     DataExportRequest[]
   deletionRequests AccountDeletionRequest[]
+  otpChallenges   OtpChallenge[]
 
   @@map("users")
 }
@@ -370,6 +373,28 @@ model DataExportRequest {
   @@index([status, nextAttemptAt])
   @@index([status, expiresAt])
   @@map("data_export_requests")
+}
+
+model OtpChallenge {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone        String
+  purpose      String    // LOGIN, PHONE_VERIFICATION
+  codeHash     String
+  status       String    @default("PENDING") // PENDING, CONSUMED, EXPIRED, REVOKED, LOCKED
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(5)
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  requestIp    String?
+  deviceId     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([phone, purpose, status])
+  @@index([userId, purpose, status])
+  @@map("otp_challenges")
 }
 
 model AccountDeletionRequest {
