@@ -31,6 +31,8 @@ model User {
   emailDeliveries EmailDelivery[]
   learnerPreference LearnerPreference?
   preferenceAuditLogs PreferenceAuditLog[]
+  sessions        Session[]
+  audits          AuditLog[]
 
   @@map("users")
 }
@@ -79,6 +81,38 @@ model PreferenceAuditLog {
 
   @@index([userId, createdAt])
   @@map("preference_audit_logs")
+}
+
+model Session {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token        String    @unique
+  refreshToken String?   @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  isRevoked    Boolean   @default(false)
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId, isRevoked])
+  @@map("sessions")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String   // "PASSWORD_RESET", "EMAIL_VERIFIED", "LOGIN", etc.
+  metadata  String?  // JSON string for additional details (without secrets)
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, action, createdAt])
+  @@map("audit_logs")
 }
 
 model VerificationToken {
@@ -288,4 +322,24 @@ model NotificationLog {
   nextAttemptAt DateTime? @default(now())
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model StellarFunding {
+  id              String    @id @default(uuid())
+  publicKey       String    @unique
+  amount          String
+  status          String    @default("pending") // pending, submitted, confirmed, dead-letter
+  transactionHash String?
+  ledger          Int?
+  retryCount      Int       @default(0)
+  maxRetries      Int       @default(5)
+  nextAttemptAt   DateTime? @default(now())
+  lastAttemptAt   DateTime?
+  error           String?
+  confirmedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@map("stellar_fundings")
 }

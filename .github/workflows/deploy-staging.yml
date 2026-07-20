@@ -1,0 +1,86 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # needed to get previous tag for rollback
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=long
+
+      # In a real scenario, this would authenticate to a registry
+      # For Phase 0, we just build the image locally and tag it with the SHA
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true # load into local docker daemon
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # We simulate the staging deployment locally on the GitHub Runner 
+      # since there's no remote target specified yet.
+      - name: Deploy to Staging (Runner)
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL || 'postgresql://learnault:staging_password@localhost:5432/learnault_staging?schema=public' }}
+          JWT_SECRET: ${{ secrets.STAGING_JWT_SECRET || 'fallback-staging-secret' }}
+        run: |
+          echo "Actor: ${{ github.actor }}"
+          echo "Digest/Tag: ${{ steps.meta.outputs.version }}"
+          
+          # We need to run the postgres db as a mock for staging
+          docker compose -f docker-compose.staging.yml up -d db
+          sleep 10 # Wait for db to initialize
+          
+          # Run deployment
+          ./scripts/deploy-staging.sh ${{ steps.meta.outputs.version }}
+
+      - name: Run Smoke Tests
+        run: ./scripts/smoke-test.sh
+
+      - name: Handle Failure & Rollback
+        if: failure()
+        run: |
+          echo "Deployment or Smoke Tests failed. Initiating Rollback..."
+          
+          # Get the previous commit SHA to rollback to
+          PREV_SHA=$(git rev-parse HEAD^)
+          PREV_TAG="sha-$PREV_SHA"
+          
+          echo "Rolling back to tag: $PREV_TAG"
+          
+          # Since this is a CI mock, we just run the rollback script
+          # In reality, this tag would be pulled from the registry
+          # We'll just build it to simulate
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$PREV_TAG .
+          
+          ./scripts/rollback-staging.sh ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$PREV_TAG
