@@ -85,6 +85,7 @@ Retry-After: 60
 | Limiter | Applies to | Default window | Default max |
 |---------|-----------|----------------|-------------|
 | `authLimiter` | `/auth/login`, `/auth/resend-verification`, `/auth/forgot-password` | 15 min | 10 |
+| `otpLimiter` | `/auth/otp/request`, `/auth/otp/verify` | 15 min | 5 |
 | `employerLimiter` | All `/employer/*` routes | 15 min | 500 |
 | `authenticatedLimiter` | All `/sync/*` routes | 15 min | 1000 |
 | `generalLimiter` | Everything else | 15 min | 100 |
@@ -199,6 +200,58 @@ On success, all active sessions are revoked and all pending verification tokens 
 |--------|---------|
 | 200 | Password reset |
 | 400 | Invalid/expired token or weak password |
+
+---
+
+### `POST /auth/otp/request`
+
+Requests a 6-digit SMS code. Behavior depends on whether a Bearer token is sent:
+
+- **No token → `LOGIN`**: the phone must already be verified on an existing account. Always returns 200 with the same generic message, whether or not the phone is registered, to avoid leaking phone existence.
+- **With token → `PHONE_VERIFICATION`**: attaches/verifies this phone number on the caller's own account.
+
+Rate-limited by IP (`otpLimiter`), by phone (1/min cooldown, 5/hour), and — if `deviceId` is supplied — by device (10/hour). SMS is sent via a mocked provider (`SMS_PROVIDER=mock`) until a real carrier is integrated; see [`docs/decisions/0001-phone-otp-authentication.md`](decisions/0001-phone-otp-authentication.md).
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `phone` | string | ✅ | E.164 format, e.g. `+2348012345678` |
+| `deviceId` | string | ❌ | Used for device-level rate limiting |
+
+**Responses**
+
+| Status | Meaning |
+|--------|---------|
+| 200 | Code sent (or silently ignored for an unregistered/unverified `LOGIN` phone) |
+| 400 | Validation failed or phone not in E.164 format |
+| 409 | Phone already verified on a different account (`PHONE_VERIFICATION` only) |
+| 429 | IP, phone, or device rate limit reached |
+
+```json
+{ "message": "If this phone number is registered, a verification code has been sent." }
+```
+
+---
+
+### `POST /auth/otp/verify`
+
+Verifies the code from `otp/request`. Codes are single-use, expire after 5 minutes, and the challenge locks after 5 wrong attempts (request a new code to retry).
+
+- **No token → `LOGIN`**: on success, returns the same JWT/user shape as `POST /auth/login`, after the same account-status checks (deactivated/pending-deletion/deleted).
+- **With token → `PHONE_VERIFICATION`**: on success, marks the phone verified on the caller's account.
+
+**Request body:** `{ "phone": "+2348012345678", "code": "123456" }`
+
+**Responses**
+
+| Status | Meaning |
+|--------|---------|
+| 200 | Verified — login response or `{ "message": "Phone number verified successfully" }` |
+| 400 | Invalid/expired code, or validation failed |
+| 401 | Invalid credentials (tombstoned account; `LOGIN` only) |
+| 403 | Account deactivated or pending deletion (`LOGIN` only) |
+| 429 | Too many wrong attempts — challenge locked |
 
 ---
 

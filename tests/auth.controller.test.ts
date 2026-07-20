@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Request, Response } from 'express'
-import { AuthController, resendCooldowns, resendAccountCounts } from '../src/controllers/auth.controller'
+import { AuthController, resendCooldowns, resendAccountCounts, otpPhoneCounts, otpDeviceCounts } from '../src/controllers/auth.controller'
 import prisma from '../src/config/database'
 import bcrypt from 'bcryptjs'
 import { emailService } from '../src/services/email.service'
+import { otpService } from '../src/services/otp.service'
 
 const mockTokenHash = 'abc123def456hash'
 const mockRawToken = 'aaabbbcccddd00112233445566778899aabbccddeeff00112233445566778899'
@@ -62,6 +63,18 @@ vi.mock('../src/services/email.service', () => ({
     },
 }))
 
+vi.mock('../src/services/otp.service', async () => {
+    const actual = await vi.importActual<typeof import('../src/services/otp.service')>('../src/services/otp.service')
+
+    return {
+        ...actual,
+        otpService: {
+            requestChallenge: vi.fn().mockResolvedValue(undefined),
+            verifyChallenge: vi.fn(),
+        },
+    }
+})
+
 describe('AuthController', () => {
     let authController: AuthController
     let mockRequest: Partial<Request>
@@ -79,6 +92,8 @@ describe('AuthController', () => {
         }
         resendCooldowns.clear()
         resendAccountCounts.clear()
+        otpPhoneCounts.clear()
+        otpDeviceCounts.clear()
         vi.clearAllMocks()
     })
 
@@ -719,6 +734,212 @@ describe('AuthController', () => {
                 message:
                     'Logged out successfully. Please clear your token client-side.',
             })
+        })
+    })
+
+    describe('requestOtp', () => {
+        it('should reject a malformed phone number', async () => {
+            mockRequest.body = { phone: '08012345678' }
+
+            await authController.requestOtp(mockRequest as Request, mockResponse as Response)
+
+            expect(mockResponse.status).toHaveBeenCalledWith(400)
+            expect(otpService.requestChallenge).not.toHaveBeenCalled()
+        })
+
+        it('LOGIN: returns a generic 200 without creating a challenge for an unregistered phone', async () => {
+            mockRequest.body = { phone: '+2348012345678' }
+
+            ;(prisma.user.findUnique as any).mockResolvedValue(null)
+
+            await authController.requestOtp(mockRequest as Request, mockResponse as Response)
+
+            expect(otpService.requestChallenge).not.toHaveBeenCalled()
+            expect(mockResponse.status).toHaveBeenCalledWith(200)
+            expect(mockResponse.json).toHaveBeenCalledWith({
+                message: 'If this phone number is registered, a verification code has been sent.',
+            })
+        })
+
+        it('LOGIN: returns the same generic 200 for a phone that has not been verified', async () => {
+            mockRequest.body = { phone: '+2348012345678' }
+
+            ;(prisma.user.findUnique as any).mockResolvedValue({
+                id: 'user1',
+                status: 'ACTIVE',
+                phoneVerifiedAt: null,
+            })
+
+            await authController.requestOtp(mockRequest as Request, mockResponse as Response)
+
+            expect(otpService.requestChallenge).not.toHaveBeenCalled()
+            expect(mockResponse.status).toHaveBeenCalledWith(200)
+            expect(mockResponse.json).toHaveBeenCalledWith({
+                message: 'If this phone number is registered, a verification code has been sent.',
+            })
+        })
+
+        it('LOGIN: requests a challenge for a verified, active phone', async () => {
+            mockRequest.body = { phone: '+2348012345678' }
+
+            ;(prisma.user.findUnique as any).mockResolvedValue({
+                id: 'user1',
+                status: 'ACTIVE',
+                phoneVerifiedAt: new Date(),
+            })
+
+            await authController.requestOtp(mockRequest as Request, mockResponse as Response)
+
+            expect(otpService.requestChallenge).toHaveBeenCalledWith(
+                '+2348012345678',
+                'LOGIN',
+                'user1',
+                expect.objectContaining({ ip: '127.0.0.1' })
+            )
+            expect(mockResponse.status).toHaveBeenCalledWith(200)
+        })
+
+        it('PHONE_VERIFICATION: requests a challenge for the authenticated caller', async () => {
+            mockRequest.body = { phone: '+2348012345678' }
+            ;(mockRequest as any).user = { id: 'user1', role: 'learner' }
+
+            ;(prisma.user.findFirst as any).mockResolvedValue(null)
+
+            await authController.requestOtp(mockRequest as Request, mockResponse as Response)
+
+            expect(otpService.requestChallenge).toHaveBeenCalledWith(
+                '+2348012345678',
+                'PHONE_VERIFICATION',
+                'user1',
+                expect.anything()
+            )
+            expect(mockResponse.status).toHaveBeenCalledWith(200)
+            expect(mockResponse.json).toHaveBeenCalledWith({ message: 'Verification code sent.' })
+        })
+
+        it('PHONE_VERIFICATION: rejects a phone already verified on another account', async () => {
+            mockRequest.body = { phone: '+2348012345678' }
+            ;(mockRequest as any).user = { id: 'user1', role: 'learner' }
+
+            ;(prisma.user.findFirst as any).mockResolvedValue({ id: 'user2' })
+
+            await authController.requestOtp(mockRequest as Request, mockResponse as Response)
+
+            expect(otpService.requestChallenge).not.toHaveBeenCalled()
+            expect(mockResponse.status).toHaveBeenCalledWith(409)
+        })
+
+        it('should rate-limit repeated requests for the same phone', async () => {
+            ;(prisma.user.findUnique as any).mockResolvedValue({
+                id: 'user1',
+                status: 'ACTIVE',
+                phoneVerifiedAt: new Date(),
+            })
+
+            mockRequest.body = { phone: '+2348012345678' }
+            await authController.requestOtp(mockRequest as Request, mockResponse as Response)
+            expect(mockResponse.status).toHaveBeenCalledWith(200)
+
+            vi.clearAllMocks()
+            mockRequest.body = { phone: '+2348012345678' }
+            await authController.requestOtp(mockRequest as Request, mockResponse as Response)
+
+            expect(mockResponse.status).toHaveBeenCalledWith(429)
+            expect(otpService.requestChallenge).not.toHaveBeenCalled()
+        })
+
+        it('should rate-limit repeated requests from the same device regardless of phone', async () => {
+            ;(prisma.user.findUnique as any).mockResolvedValue({
+                id: 'user1',
+                status: 'ACTIVE',
+                phoneVerifiedAt: new Date(),
+            })
+
+            otpDeviceCounts.set('device-1', { count: 10, resetAt: Date.now() + 60_000 })
+
+            mockRequest.body = { phone: '+2348012345678', deviceId: 'device-1' }
+            await authController.requestOtp(mockRequest as Request, mockResponse as Response)
+
+            expect(mockResponse.status).toHaveBeenCalledWith(429)
+            expect(otpService.requestChallenge).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('verifyOtp', () => {
+        it('should return 400 for an invalid/expired code', async () => {
+            mockRequest.body = { phone: '+2348012345678', code: '000000' }
+
+            ;(otpService.verifyChallenge as any).mockResolvedValue({ ok: false, reason: 'mismatch' })
+
+            await authController.verifyOtp(mockRequest as Request, mockResponse as Response)
+
+            expect(mockResponse.status).toHaveBeenCalledWith(400)
+            expect(mockResponse.json).toHaveBeenCalledWith({ error: 'Invalid or expired code' })
+        })
+
+        it('should return 429 once the challenge is locked', async () => {
+            mockRequest.body = { phone: '+2348012345678', code: '000000' }
+
+            ;(otpService.verifyChallenge as any).mockResolvedValue({ ok: false, reason: 'locked' })
+
+            await authController.verifyOtp(mockRequest as Request, mockResponse as Response)
+
+            expect(mockResponse.status).toHaveBeenCalledWith(429)
+        })
+
+        it('LOGIN: issues a JWT on a correct code for an active account', async () => {
+            mockRequest.body = { phone: '+2348012345678', code: '123456' }
+
+            ;(otpService.verifyChallenge as any).mockResolvedValue({ ok: true, userId: 'user1' })
+            ;(prisma.user.findUnique as any).mockResolvedValue({
+                id: 'user1',
+                email: 'test@example.com',
+                username: 'testuser',
+                role: 'LEARNER',
+                status: 'ACTIVE',
+            })
+            ;(prisma.user.update as any).mockResolvedValue({})
+
+            await authController.verifyOtp(mockRequest as Request, mockResponse as Response)
+
+            expect(mockResponse.status).toHaveBeenCalledWith(200)
+            expect(mockResponse.json).toHaveBeenCalledWith(
+                expect.objectContaining({ message: 'Login successful', token: 'mock_token' })
+            )
+        })
+
+        it('LOGIN: blocks a deactivated account the same way as password login', async () => {
+            mockRequest.body = { phone: '+2348012345678', code: '123456' }
+
+            ;(otpService.verifyChallenge as any).mockResolvedValue({ ok: true, userId: 'user1' })
+            ;(prisma.user.findUnique as any).mockResolvedValue({
+                id: 'user1',
+                status: 'DEACTIVATED',
+            })
+
+            await authController.verifyOtp(mockRequest as Request, mockResponse as Response)
+
+            expect(mockResponse.status).toHaveBeenCalledWith(403)
+            expect(mockResponse.json).toHaveBeenCalledWith(
+                expect.objectContaining({ code: 'ACCOUNT_DEACTIVATED' })
+            )
+        })
+
+        it('PHONE_VERIFICATION: marks the phone verified on the authenticated caller', async () => {
+            mockRequest.body = { phone: '+2348012345678', code: '123456' }
+            ;(mockRequest as any).user = { id: 'user1', role: 'learner' }
+
+            ;(otpService.verifyChallenge as any).mockResolvedValue({ ok: true, userId: 'user1' })
+            ;(prisma.user.update as any).mockResolvedValue({})
+
+            await authController.verifyOtp(mockRequest as Request, mockResponse as Response)
+
+            expect(prisma.user.update).toHaveBeenCalledWith({
+                where: { id: 'user1' },
+                data: { phone: '+2348012345678', phoneVerifiedAt: expect.any(Date) },
+            })
+            expect(mockResponse.status).toHaveBeenCalledWith(200)
+            expect(mockResponse.json).toHaveBeenCalledWith({ message: 'Phone number verified successfully' })
         })
     })
 })

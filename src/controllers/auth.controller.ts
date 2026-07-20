@@ -3,9 +3,10 @@ import { Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import prisma from '../config/database'
-import { loginSchema, registerSchema, verifyEmailSchema, resendVerificationSchema, forgotPasswordSchema, resetPasswordSchema } from '../schemas/auth.schema'
+import { loginSchema, registerSchema, verifyEmailSchema, resendVerificationSchema, forgotPasswordSchema, resetPasswordSchema, otpRequestSchema, otpVerifySchema } from '../schemas/auth.schema'
 import { UserRole } from '../types/user.types'
 import { emailService } from '../services/email.service'
+import { otpService, normalizePhone, OtpPurpose } from '../services/otp.service'
 import logger from '../utils/logger'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-default-secret'
@@ -19,11 +20,18 @@ const RESEND_ACCOUNT_WINDOW_MS = 24 * 60 * 60 * 1000 // 24 hours
 const RESET_PASSWORD_COOLDOWN_MS = 60 * 1000 // 1 minute
 const RESET_PASSWORD_ACCOUNT_LIMIT = 3
 const RESET_PASSWORD_ACCOUNT_WINDOW_MS = 24 * 60 * 60 * 1000 // 24 hours
+const OTP_PHONE_COOLDOWN_MS = 60 * 1000 // 1 minute between requests to the same phone
+const OTP_PHONE_LIMIT = 5
+const OTP_PHONE_WINDOW_MS = 60 * 60 * 1000 // 1 hour
+const OTP_DEVICE_LIMIT = 10
+const OTP_DEVICE_WINDOW_MS = 60 * 60 * 1000 // 1 hour
 
 export const resendCooldowns = new Map<string, number>()
 export const resendAccountCounts = new Map<string, { count: number; resetAt: number }>()
 export const resetPasswordCooldowns = new Map<string, number>()
 export const resetPasswordAccountCounts = new Map<string, { count: number; resetAt: number }>()
+export const otpPhoneCounts = new Map<string, { count: number; resetAt: number }>()
+export const otpDeviceCounts = new Map<string, { count: number; resetAt: number }>()
 
 function generateVerificationToken(): { rawToken: string; tokenHash: string } {
     const rawToken = crypto.randomBytes(32).toString('hex')
@@ -489,33 +497,9 @@ export class AuthController {
                 return
             }
 
-            if (user.status === 'DELETED') {
-                // Tombstoned account — indistinguishable from unknown credentials
-                res.status(401).json({ error: 'Invalid credentials' })
-
-                return
-            }
-
-            if (user.status === 'DEACTIVATED') {
-                res.status(403).json({
-                    error: 'Account is deactivated',
-                    code: 'ACCOUNT_DEACTIVATED',
-                })
-
-                return
-            }
-
-            if (user.status === 'PENDING_DELETION') {
-                const deletionRequest = await prisma.accountDeletionRequest.findFirst({
-                    where: { userId: user.id, status: 'pending' },
-                    select: { scheduledFor: true },
-                })
-
-                res.status(403).json({
-                    error: 'Account is scheduled for deletion',
-                    code: 'ACCOUNT_PENDING_DELETION',
-                    scheduledFor: deletionRequest?.scheduledFor ?? null,
-                })
+            const statusError = await this.getAccountStatusError(user)
+            if (statusError) {
+                res.status(statusError.statusCode).json(statusError.body)
 
                 return
             }
@@ -791,6 +775,328 @@ export class AuthController {
         }
     }
 
+    /**
+     * @openapi
+     * /auth/otp/request:
+     *   post:
+     *     operationId: authOtpRequest
+     *     summary: Request a phone OTP code (login or phone verification)
+     *     description: >
+     *       Without a Bearer token, requests a LOGIN code for a phone number
+     *       already verified on some account. Always returns 200 with the
+     *       same message regardless of whether the number is registered, to
+     *       avoid leaking phone existence.
+     *
+     *       With a Bearer token, requests a PHONE_VERIFICATION code to attach
+     *       that phone number to the caller's own account.
+     *
+     *       Rate-limited by IP, phone (1/min, 5/hour), and, if a `deviceId`
+     *       is supplied, by device (10/hour).
+     *     tags: [Auth]
+     *     security: []
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             $ref: '#/components/schemas/OtpRequestInput'
+     *     responses:
+     *       200:
+     *         description: A code has been sent, or the request was silently ignored (LOGIN, unregistered/unverified phone).
+     *       400:
+     *         description: Validation failed or phone number is not in E.164 format.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
+     *       409:
+     *         description: Phone number is already verified on a different account.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
+     *       429:
+     *         description: Too many requests — IP, phone, or device rate limit reached.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
+     *       500:
+     *         description: Internal server error
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
+     */
+    async requestOtp(req: Request, res: Response): Promise<void> {
+        try {
+            const validation = otpRequestSchema.safeParse(req.body)
+            if (!validation.success) {
+                res.status(400).json({
+                    error: 'Validation failed',
+                    details: validation.error.format()
+                })
+
+                return
+            }
+
+            const { phone, deviceId } = validation.data
+            const normalizedPhone = normalizePhone(phone)
+
+            if (!normalizedPhone) {
+                res.status(400).json({ error: 'Phone number must be in E.164 format, e.g. +2348012345678' })
+
+                return
+            }
+
+            if (deviceId && this.isDeviceOtpLimited(deviceId)) {
+                res.status(429).json({ error: 'Too many requests. Please try again later.' })
+
+                return
+            }
+
+            const authenticatedUserId = req.user?.id
+            const purpose: OtpPurpose = authenticatedUserId ? 'PHONE_VERIFICATION' : 'LOGIN'
+
+            if (this.isRateLimited(`otp:phone:${purpose}:${normalizedPhone}`, OTP_PHONE_COOLDOWN_MS)
+                || this.isPhoneOtpLimited(normalizedPhone, purpose)) {
+                res.status(429).json({ error: 'Too many requests. Please try again later.' })
+
+                return
+            }
+
+            let targetUserId: string
+
+            if (authenticatedUserId) {
+                const conflict = await prisma.user.findFirst({
+                    where: {
+                        phone: normalizedPhone,
+                        phoneVerifiedAt: { not: null },
+                        NOT: { id: authenticatedUserId },
+                    },
+                })
+
+                if (conflict) {
+                    res.status(409).json({ error: 'Phone number is already verified on another account' })
+
+                    return
+                }
+
+                targetUserId = authenticatedUserId
+            } else {
+                const user = await prisma.user.findUnique({ where: { phone: normalizedPhone } })
+
+                if (!user || !user.phoneVerifiedAt || user.status !== 'ACTIVE') {
+                    res.status(200).json({ message: 'If this phone number is registered, a verification code has been sent.' })
+
+                    return
+                }
+
+                targetUserId = user.id
+            }
+
+            this.recordPhoneOtpRequest(normalizedPhone, purpose)
+            if (deviceId) {
+                this.recordDeviceOtpRequest(deviceId)
+            }
+
+            const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+                || (req.headers['x-real-ip'] as string)
+                || req.socket.remoteAddress
+                || 'unknown'
+
+            await otpService.requestChallenge(normalizedPhone, purpose, targetUserId, { ip, deviceId })
+
+            res.status(200).json(
+                purpose === 'PHONE_VERIFICATION'
+                    ? { message: 'Verification code sent.' }
+                    : { message: 'If this phone number is registered, a verification code has been sent.' }
+            )
+        } catch (error) {
+            console.error('OTP request error:', error)
+            res.status(500).json({ error: 'Internal server error' })
+        }
+    }
+
+    /**
+     * @openapi
+     * /auth/otp/verify:
+     *   post:
+     *     operationId: authOtpVerify
+     *     summary: Verify a phone OTP code (completes login or phone verification)
+     *     description: >
+     *       Without a Bearer token, verifies a LOGIN code and returns a JWT,
+     *       identical in shape to POST /auth/login. With a Bearer token,
+     *       verifies a PHONE_VERIFICATION code and marks the phone verified
+     *       on the caller's account.
+     *
+     *       Codes are single-use, expire after 5 minutes, and the challenge
+     *       locks after 5 wrong attempts (request a new code to retry).
+     *     tags: [Auth]
+     *     security: []
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             $ref: '#/components/schemas/OtpVerifyInput'
+     *     responses:
+     *       200:
+     *         description: Verified — login response (LOGIN) or confirmation message (PHONE_VERIFICATION).
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/AuthResponse'
+     *       400:
+     *         description: Validation failed, malformed phone, or invalid/expired code.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
+     *       401:
+     *         description: Invalid credentials (tombstoned account; LOGIN purpose only).
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
+     *       403:
+     *         description: Account is deactivated or pending deletion (LOGIN purpose only).
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/AccountStatusError'
+     *       429:
+     *         description: Too many wrong attempts — the challenge is locked; request a new code.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
+     *       500:
+     *         description: Internal server error
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
+     */
+    async verifyOtp(req: Request, res: Response): Promise<void> {
+        try {
+            const validation = otpVerifySchema.safeParse(req.body)
+            if (!validation.success) {
+                res.status(400).json({
+                    error: 'Validation failed',
+                    details: validation.error.format()
+                })
+
+                return
+            }
+
+            const { phone, code } = validation.data
+            const normalizedPhone = normalizePhone(phone)
+
+            if (!normalizedPhone) {
+                res.status(400).json({ error: 'Invalid or expired code' })
+
+                return
+            }
+
+            const authenticatedUserId = req.user?.id
+            const purpose: OtpPurpose = authenticatedUserId ? 'PHONE_VERIFICATION' : 'LOGIN'
+
+            const result = await otpService.verifyChallenge(normalizedPhone, code, purpose, authenticatedUserId)
+
+            if (!result.ok) {
+                if (result.reason === 'locked') {
+                    res.status(429).json({ error: 'Too many attempts. Please request a new code.' })
+
+                    return
+                }
+
+                res.status(400).json({ error: 'Invalid or expired code' })
+
+                return
+            }
+
+            if (purpose === 'PHONE_VERIFICATION') {
+                await prisma.user.update({
+                    where: { id: result.userId },
+                    data: { phone: normalizedPhone, phoneVerifiedAt: new Date() },
+                })
+
+                res.status(200).json({ message: 'Phone number verified successfully' })
+
+                return
+            }
+
+            const user = await prisma.user.findUnique({ where: { id: result.userId } })
+
+            if (!user) {
+                res.status(401).json({ error: 'Invalid credentials' })
+
+                return
+            }
+
+            const statusError = await this.getAccountStatusError(user)
+            if (statusError) {
+                res.status(statusError.statusCode).json(statusError.body)
+
+                return
+            }
+
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { lastLoginAt: new Date() }
+            })
+
+            const token = this.generateToken(user.id, user.role)
+
+            res.status(200).json({
+                message: 'Login successful',
+                token,
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    username: user.username,
+                    role: user.role
+                }
+            })
+        } catch (error) {
+            console.error('OTP verify error:', error)
+            res.status(500).json({ error: 'Internal server error' })
+        }
+    }
+
+    private async getAccountStatusError(user: { id: string; status: string }): Promise<{ statusCode: number; body: Record<string, unknown> } | null> {
+        if (user.status === 'DELETED') {
+            // Tombstoned account — indistinguishable from unknown credentials
+            return { statusCode: 401, body: { error: 'Invalid credentials' } }
+        }
+
+        if (user.status === 'DEACTIVATED') {
+            return {
+                statusCode: 403,
+                body: { error: 'Account is deactivated', code: 'ACCOUNT_DEACTIVATED' },
+            }
+        }
+
+        if (user.status === 'PENDING_DELETION') {
+            const deletionRequest = await prisma.accountDeletionRequest.findFirst({
+                where: { userId: user.id, status: 'pending' },
+                select: { scheduledFor: true },
+            })
+
+            return {
+                statusCode: 403,
+                body: {
+                    error: 'Account is scheduled for deletion',
+                    code: 'ACCOUNT_PENDING_DELETION',
+                    scheduledFor: deletionRequest?.scheduledFor ?? null,
+                },
+            }
+        }
+
+        return null
+    }
+
     private generateToken(userId: string, role: string): string {
         return jwt.sign(
             { id: userId, role },
@@ -849,6 +1155,51 @@ export class AuthController {
 
         if (!record || record.resetAt < now) {
             resetPasswordAccountCounts.set(userId, { count: 1, resetAt: now + RESET_PASSWORD_ACCOUNT_WINDOW_MS })
+        } else {
+            record.count++
+        }
+    }
+
+    private isPhoneOtpLimited(phone: string, purpose: string): boolean {
+        const now = Date.now()
+        const record = otpPhoneCounts.get(`${purpose}:${phone}`)
+
+        if (!record || record.resetAt < now) {
+            return false
+        }
+
+        return record.count >= OTP_PHONE_LIMIT
+    }
+
+    private recordPhoneOtpRequest(phone: string, purpose: string): void {
+        const now = Date.now()
+        const key = `${purpose}:${phone}`
+        const record = otpPhoneCounts.get(key)
+
+        if (!record || record.resetAt < now) {
+            otpPhoneCounts.set(key, { count: 1, resetAt: now + OTP_PHONE_WINDOW_MS })
+        } else {
+            record.count++
+        }
+    }
+
+    private isDeviceOtpLimited(deviceId: string): boolean {
+        const now = Date.now()
+        const record = otpDeviceCounts.get(deviceId)
+
+        if (!record || record.resetAt < now) {
+            return false
+        }
+
+        return record.count >= OTP_DEVICE_LIMIT
+    }
+
+    private recordDeviceOtpRequest(deviceId: string): void {
+        const now = Date.now()
+        const record = otpDeviceCounts.get(deviceId)
+
+        if (!record || record.resetAt < now) {
+            otpDeviceCounts.set(deviceId, { count: 1, resetAt: now + OTP_DEVICE_WINDOW_MS })
         } else {
             record.count++
         }
