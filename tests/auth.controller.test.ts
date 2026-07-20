@@ -25,6 +25,9 @@ vi.mock('../src/config/database', () => ({
         emailDelivery: {
             create: vi.fn(),
         },
+        accountDeletionRequest: {
+            findFirst: vi.fn(),
+        },
         $transaction: vi.fn((args: any[]) => Promise.all(args)),
     },
 }))
@@ -593,6 +596,91 @@ describe('AuthController', () => {
                     token: 'mock_token',
                 })
             )
+        })
+
+        it('should return 403 with ACCOUNT_DEACTIVATED for deactivated accounts', async () => {
+            mockRequest.body = {
+                email: 'test@example.com',
+                password: 'Password123!',
+            }
+
+            ;(prisma.user.findUnique as any).mockResolvedValue({
+                id: '1',
+                email: 'test@example.com',
+                password: 'hashed_password',
+                username: 'testuser',
+                role: 'LEARNER',
+                status: 'DEACTIVATED',
+            })
+            ;(bcrypt.compare as any).mockResolvedValue(true)
+
+            await authController.login(
+                mockRequest as Request,
+                mockResponse as Response
+            )
+
+            expect(mockResponse.status).toHaveBeenCalledWith(403)
+            expect(mockResponse.json).toHaveBeenCalledWith(
+                expect.objectContaining({ code: 'ACCOUNT_DEACTIVATED' })
+            )
+        })
+
+        it('should return 403 with scheduledFor for accounts pending deletion', async () => {
+            mockRequest.body = {
+                email: 'test@example.com',
+                password: 'Password123!',
+            }
+
+            const scheduledFor = new Date('2026-08-18T00:00:00Z')
+
+            ;(prisma.user.findUnique as any).mockResolvedValue({
+                id: '1',
+                email: 'test@example.com',
+                password: 'hashed_password',
+                username: 'testuser',
+                role: 'LEARNER',
+                status: 'PENDING_DELETION',
+            })
+            ;(bcrypt.compare as any).mockResolvedValue(true)
+            ;(prisma.accountDeletionRequest.findFirst as any).mockResolvedValue({ scheduledFor })
+
+            await authController.login(
+                mockRequest as Request,
+                mockResponse as Response
+            )
+
+            expect(mockResponse.status).toHaveBeenCalledWith(403)
+            expect(mockResponse.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    code: 'ACCOUNT_PENDING_DELETION',
+                    scheduledFor,
+                })
+            )
+        })
+
+        it('should return a neutral 401 for deleted (tombstoned) accounts', async () => {
+            mockRequest.body = {
+                email: 'test@example.com',
+                password: 'Password123!',
+            }
+
+            ;(prisma.user.findUnique as any).mockResolvedValue({
+                id: '1',
+                email: 'deleted+abc@anon.invalid',
+                password: 'tombstone',
+                username: 'deleted_abc',
+                role: 'LEARNER',
+                status: 'DELETED',
+            })
+            ;(bcrypt.compare as any).mockResolvedValue(true)
+
+            await authController.login(
+                mockRequest as Request,
+                mockResponse as Response
+            )
+
+            expect(mockResponse.status).toHaveBeenCalledWith(401)
+            expect(mockResponse.json).toHaveBeenCalledWith({ error: 'Invalid credentials' })
         })
 
         it('should return 401 for invalid credentials', async () => {
