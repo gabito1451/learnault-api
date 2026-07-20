@@ -1,7 +1,178 @@
 /**
+ * OpenAPI component schemas for the Learnault API.
+ *
+ * This file is picked up by swagger-jsdoc via the `apis` glob in swagger.ts.
+ * Do not add route operations here — keep those in the individual controller files.
+ */
+
+/**
  * @openapi
  * components:
  *   schemas:
+ *
+ *     # ── Shared / primitives ───────────────────────────────────────────────
+ *
+ *     ErrorResponse:
+ *       type: object
+ *       description: Standard error envelope returned for all 4xx and 5xx responses.
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           example: false
+ *         error:
+ *           type: object
+ *           properties:
+ *             message:
+ *               type: string
+ *               example: Resource not found
+ *             code:
+ *               type: integer
+ *               example: 404
+ *
+ *     Pagination:
+ *       type: object
+ *       description: Page-based pagination metadata.
+ *       properties:
+ *         page:
+ *           type: integer
+ *           example: 1
+ *         limit:
+ *           type: integer
+ *           example: 20
+ *         total:
+ *           type: integer
+ *           example: 100
+ *         totalPages:
+ *           type: integer
+ *           example: 5
+ *         hasNext:
+ *           type: boolean
+ *           example: true
+ *         hasPrev:
+ *           type: boolean
+ *           example: false
+ *
+ */
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *
+ *     # ── Auth ──────────────────────────────────────────────────────────────
+ *
+ *     RegisterInput:
+ *       type: object
+ *       required: [email, password, username]
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *           example: alice@example.com
+ *         password:
+ *           type: string
+ *           format: password
+ *           minLength: 8
+ *           example: P@ssword1
+ *         username:
+ *           type: string
+ *           minLength: 3
+ *           example: alice42
+ *         role:
+ *           type: string
+ *           enum: [learner, employer]
+ *           default: learner
+ *
+ *     LoginInput:
+ *       type: object
+ *       required: [email, password]
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *           example: alice@example.com
+ *         password:
+ *           type: string
+ *           format: password
+ *           example: P@ssword1
+ *
+ *     AuthUser:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         email:
+ *           type: string
+ *           format: email
+ *         username:
+ *           type: string
+ *         role:
+ *           type: string
+ *           enum: [learner, employer, admin]
+ *
+ *     AuthResponse:
+ *       type: object
+ *       properties:
+ *         message:
+ *           type: string
+ *           example: User registered successfully
+ *         token:
+ *           type: string
+ *           description: JWT; pass as Authorization Bearer token.
+ *         user:
+ *           $ref: '#/components/schemas/AuthUser'
+ *
+ *     VerifyEmailInput:
+ *       type: object
+ *       required: [token]
+ *       properties:
+ *         token:
+ *           type: string
+ *           description: 64-character hex token from the verification email.
+ *           example: a1b2c3d4e5f6...
+ *
+ *     ResendVerificationInput:
+ *       type: object
+ *       required: [email]
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *           example: alice@example.com
+ *
+ *     ForgotPasswordInput:
+ *       type: object
+ *       required: [email]
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *           example: alice@example.com
+ *
+ *     ResetPasswordInput:
+ *       type: object
+ *       required: [token, newPassword]
+ *       properties:
+ *         token:
+ *           type: string
+ *           description: 64-character hex token from the password-reset email.
+ *           example: d4e5f6a1b2c3...
+ *         newPassword:
+ *           type: string
+ *           format: password
+ *           minLength: 8
+ *           example: NewP@ss1
+ *
+ */
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *
+ *     # ── Users ─────────────────────────────────────────────────────────────
+ *
  *     User:
  *       type: object
  *       properties:
@@ -15,20 +186,26 @@
  *           type: string
  *         firstName:
  *           type: string
+ *           nullable: true
  *         lastName:
  *           type: string
+ *           nullable: true
  *         bio:
  *           type: string
+ *           nullable: true
  *         avatar:
  *           type: string
- *           format: url
+ *           format: uri
+ *           nullable: true
  *         walletAddress:
  *           type: string
+ *           nullable: true
+ *           example: GABC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGH
  *         isActive:
  *           type: boolean
  *         role:
  *           type: string
- *           enum: [LEARNER, EMPLOYER, ADMIN]
+ *           enum: [learner, employer, admin]
  *         createdAt:
  *           type: string
  *           format: date-time
@@ -36,112 +213,98 @@
  *           type: string
  *           format: date-time
  *
- *     UpdateUser:
+ *     PublicUser:
  *       type: object
+ *       description: Publicly visible subset of a user profile.
  *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
  *         username:
  *           type: string
  *         firstName:
  *           type: string
+ *           nullable: true
  *         lastName:
  *           type: string
- *         bio:
- *           type: string
+ *           nullable: true
  *         avatar:
  *           type: string
- *           format: url
- *
- *     RegisterInput:
- *       type: object
- *       required:
- *         - email
- *         - password
- *         - username
- *       properties:
- *         email:
- *           type: string
- *           format: email
- *         password:
- *           type: string
- *           format: password
- *         username:
- *           type: string
+ *           format: uri
+ *           nullable: true
  *         role:
  *           type: string
- *           enum: [LEARNER, EMPLOYER]
- *
- *     LoginInput:
- *       type: object
- *       required:
- *         - email
- *         - password
- *       properties:
- *         email:
+ *           enum: [learner, employer, admin]
+ *         createdAt:
  *           type: string
- *           format: email
- *         password:
+ *           format: date-time
+ *
+ *     UpdateUserInput:
+ *       type: object
+ *       description: All fields are optional; send only what you want to change.
+ *       properties:
+ *         username:
+ *           type: string
+ *           minLength: 3
+ *           maxLength: 30
+ *         firstName:
+ *           type: string
+ *           maxLength: 50
+ *         lastName:
+ *           type: string
+ *           maxLength: 50
+ *         bio:
+ *           type: string
+ *           maxLength: 500
+ *         avatar:
+ *           type: string
+ *           format: uri
+ *
+ *     ChangePasswordInput:
+ *       type: object
+ *       required: [currentPassword, newPassword]
+ *       properties:
+ *         currentPassword:
  *           type: string
  *           format: password
- *
- *     AuthResponse:
- *       type: object
- *       properties:
- *         message:
- *           type: string
- *         token:
- *           type: string
- *         user:
- *           $ref: '#/components/schemas/User'
- *
- *     VerifyEmailInput:
- *       type: object
- *       required:
- *         - token
- *       properties:
- *         token:
- *           type: string
- *
- *     VerifyEmailResponse:
- *       type: object
- *       properties:
- *         message:
- *           type: string
- *
- *     ResendVerificationInput:
- *       type: object
- *       required:
- *         - email
- *       properties:
- *         email:
- *           type: string
- *           format: email
- *
- *     ResendVerificationResponse:
- *       type: object
- *       properties:
- *         message:
- *           type: string
- *
- *     ForgotPasswordInput:
- *       type: object
- *       required:
- *         - email
- *       properties:
- *         email:
- *           type: string
- *           format: email
- *
- *     ResetPasswordInput:
- *       type: object
- *       required:
- *         - token
- *         - newPassword
- *       properties:
- *         token:
- *           type: string
  *         newPassword:
  *           type: string
  *           format: password
+ *           minLength: 8
+ *           description: >
+ *             Must be at least 8 characters and contain uppercase, lowercase,
+ *             a digit, and a special character (@$!%*?&).
+ *
+ *     UpdateWalletInput:
+ *       type: object
+ *       required: [walletAddress]
+ *       properties:
+ *         walletAddress:
+ *           type: string
+ *           pattern: '^G[A-Z0-9]{55}$'
+ *           example: GABC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGH
+ *
+ */
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *
+ *     # ── Modules ───────────────────────────────────────────────────────────
+ *
+ *     UserProgress:
+ *       type: object
+ *       nullable: true
+ *       properties:
+ *         completed:
+ *           type: boolean
+ *         score:
+ *           type: number
+ *         completedAt:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
  *
  *     Module:
  *       type: object
@@ -159,6 +322,7 @@
  *           type: string
  *         reward:
  *           type: number
+ *           description: XLM reward for passing the quiz (score >= 70%).
  *         createdAt:
  *           type: string
  *           format: date-time
@@ -168,16 +332,7 @@
  *         completionCount:
  *           type: integer
  *         userProgress:
- *           type: object
- *           nullable: true
- *           properties:
- *             completed:
- *               type: boolean
- *             score:
- *               type: number
- *             completedAt:
- *               type: string
- *               format: date-time
+ *           $ref: '#/components/schemas/UserProgress'
  *
  *     ModuleList:
  *       type: object
@@ -189,31 +344,15 @@
  *         pagination:
  *           $ref: '#/components/schemas/Pagination'
  *
- *     Pagination:
- *       type: object
- *       properties:
- *         page:
- *           type: integer
- *         limit:
- *           type: integer
- *         total:
- *           type: integer
- *         totalPages:
- *           type: integer
- *         hasNext:
- *           type: boolean
- *         hasPrev:
- *           type: boolean
- *
  *     CompleteModuleInput:
  *       type: object
- *       required:
- *         - quizAnswers
+ *       required: [quizAnswers]
  *       properties:
  *         quizAnswers:
  *           type: array
  *           items:
  *             type: object
+ *             required: [questionId, answer]
  *             properties:
  *               questionId:
  *                 type: string
@@ -227,21 +366,180 @@
  *           type: string
  *         score:
  *           type: number
+ *           example: 80
  *         isEligibleForReward:
  *           type: boolean
  *         reward:
  *           type: number
+ *           description: XLM amount rewarded (0 if score < 70%).
  *         rewardTransaction:
  *           type: string
+ *           format: uuid
+ *           nullable: true
  *         completedAt:
  *           type: string
  *           format: date-time
+ *
+ */
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *
+ *     # ── Credentials ───────────────────────────────────────────────────────
+ *
+ *     CredentialSummary:
+ *       type: object
+ *       description: Credential as returned in the list endpoint.
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         userId:
+ *           type: string
+ *           format: uuid
+ *         moduleId:
+ *           type: string
+ *           format: uuid
+ *         moduleName:
+ *           type: string
+ *         moduleCategory:
+ *           type: string
+ *         moduleDifficulty:
+ *           type: string
+ *         onChainId:
+ *           type: string
+ *           nullable: true
+ *         issuedAt:
+ *           type: string
+ *           format: date-time
+ *         shareableLink:
+ *           type: string
+ *
+ *     CredentialList:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           example: true
+ *         data:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/CredentialSummary'
+ *         meta:
+ *           type: object
+ *           properties:
+ *             page:
+ *               type: integer
+ *             limit:
+ *               type: integer
+ *             total:
+ *               type: integer
+ *             totalPages:
+ *               type: integer
+ *             hasNextPage:
+ *               type: boolean
+ *             hasPrevPage:
+ *               type: boolean
+ *
+ *     Credential:
+ *       type: object
+ *       description: Full credential detail, including module description and metadata.
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         userId:
+ *           type: string
+ *           format: uuid
+ *         holderName:
+ *           type: string
+ *         moduleId:
+ *           type: string
+ *           format: uuid
+ *         moduleName:
+ *           type: string
+ *         moduleDescription:
+ *           type: string
+ *         moduleCategory:
+ *           type: string
+ *         moduleDifficulty:
+ *           type: string
+ *         onChainId:
+ *           type: string
+ *           nullable: true
+ *         issuedAt:
+ *           type: string
+ *           format: date-time
+ *         shareableLink:
+ *           type: string
+ *         metadata:
+ *           type: object
+ *           properties:
+ *             reward:
+ *               type: number
+ *             verificationUrl:
+ *               type: string
+ *
+ *     VerificationResponse:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           example: true
+ *         data:
+ *           type: object
+ *           properties:
+ *             valid:
+ *               type: boolean
+ *               example: true
+ *             credential:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 holderName:
+ *                   type: string
+ *                 moduleName:
+ *                   type: string
+ *                 moduleCategory:
+ *                   type: string
+ *                 moduleDifficulty:
+ *                   type: string
+ *                 onChainId:
+ *                   type: string
+ *                   nullable: true
+ *                 issuedAt:
+ *                   type: string
+ *                   format: date-time
+ *             verification:
+ *               type: object
+ *               properties:
+ *                 verifiedAt:
+ *                   type: string
+ *                   format: date-time
+ *                 status:
+ *                   type: string
+ *                   example: verified
+ *                 message:
+ *                   type: string
+ *
+ */
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *
+ *     # ── Rewards ───────────────────────────────────────────────────────────
  *
  *     RewardBalance:
  *       type: object
  *       properties:
  *         success:
  *           type: boolean
+ *           example: true
  *         data:
  *           type: object
  *           properties:
@@ -250,10 +548,13 @@
  *               properties:
  *                 available:
  *                   type: number
+ *                   example: 10.5
  *                 pending:
  *                   type: number
+ *                   example: 2.0
  *                 lifetime:
  *                   type: number
+ *                   example: 25.0
  *             updatedAt:
  *               type: string
  *               format: date-time
@@ -263,28 +564,36 @@
  *       properties:
  *         id:
  *           type: string
+ *           format: uuid
  *         type:
  *           type: string
+ *           enum: [module_reward, streak_bonus, referral_reward, withdrawal]
  *         status:
  *           type: string
+ *           enum: [pending, completed, failed]
  *         amount:
  *           type: number
  *         moduleId:
  *           type: string
+ *           format: uuid
+ *           nullable: true
  *         stellarTxHash:
  *           type: string
+ *           nullable: true
  *         createdAt:
  *           type: string
  *           format: date-time
  *         completedAt:
  *           type: string
  *           format: date-time
+ *           nullable: true
  *
  *     TransactionHistory:
  *       type: object
  *       properties:
  *         success:
  *           type: boolean
+ *           example: true
  *         data:
  *           type: object
  *           properties:
@@ -306,22 +615,27 @@
  *
  *     WithdrawalInput:
  *       type: object
- *       required:
- *         - walletAddress
- *         - amount
+ *       required: [walletAddress, amount]
  *       properties:
  *         walletAddress:
  *           type: string
+ *           pattern: '^G[A-Z0-9]{50,55}$'
+ *           example: GABC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDE
  *         amount:
  *           type: number
+ *           minimum: 0
+ *           exclusiveMinimum: true
+ *           example: 5.0
  *         memo:
  *           type: string
+ *           nullable: true
  *
  *     WithdrawalResponse:
  *       type: object
  *       properties:
  *         success:
  *           type: boolean
+ *           example: true
  *         message:
  *           type: string
  *         data:
@@ -329,6 +643,7 @@
  *           properties:
  *             transactionId:
  *               type: string
+ *               format: uuid
  *             amount:
  *               type: number
  *             stellarTxHash:
@@ -341,44 +656,240 @@
  *             completedAt:
  *               type: string
  *               format: date-time
+ *               nullable: true
  *
- *     Credential:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *         userId:
- *           type: string
- *         holderName:
- *           type: string
- *         moduleId:
- *           type: string
- *         moduleName:
- *           type: string
- *         moduleDescription:
- *           type: string
- *         moduleCategory:
- *           type: string
- *         moduleDifficulty:
- *           type: string
- *         onChainId:
- *           type: string
- *         issuedAt:
- *           type: string
- *           format: date-time
- *         shareableLink:
- *           type: string
+ */
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
  *
- *     CredentialList:
+ *     # ── Referrals ─────────────────────────────────────────────────────────
+ *
+ *     ReferralCodeResponse:
  *       type: object
  *       properties:
  *         success:
  *           type: boolean
+ *           example: true
+ *         message:
+ *           type: string
  *         data:
+ *           type: object
+ *           properties:
+ *             code:
+ *               type: string
+ *               example: A1B2C3D4
+ *
+ *     ApplyReferralInput:
+ *       type: object
+ *       required: [code]
+ *       properties:
+ *         code:
+ *           type: string
+ *           example: A1B2C3D4
+ *
+ *     ApplyReferralResponse:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           example: true
+ *         message:
+ *           type: string
+ *         data:
+ *           type: object
+ *           properties:
+ *             referralId:
+ *               type: string
+ *               format: uuid
+ *
+ *     ReferralStats:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           example: true
+ *         data:
+ *           type: object
+ *           properties:
+ *             totalReferrals:
+ *               type: integer
+ *               example: 3
+ *             activeReferrals:
+ *               type: integer
+ *               description: Referrals where the referree has completed at least one module.
+ *               example: 2
+ *             earnedBonuses:
+ *               type: number
+ *               description: Total XLM bonuses already paid out.
+ *               example: 10.0
+ *             pendingBonuses:
+ *               type: number
+ *               description: Estimated pending bonus (unpaid referrals × 5 XLM per referral).
+ *               example: 5.0
+ *
+ *     # ── Notifications ─────────────────────────────────────────────────────
+ *
+ *     RegisterDeviceInput:
+ *       type: object
+ *       required: [token, platform]
+ *       properties:
+ *         token:
+ *           type: string
+ *           description: Firebase device token.
+ *         platform:
+ *           type: string
+ *           enum: [ios, android, web]
+ *
+ *     NotificationPreferencesInput:
+ *       type: object
+ *       description: At least one field must be provided.
+ *       properties:
+ *         rewardReceipt:
+ *           type: boolean
+ *         quizPassFail:
+ *           type: boolean
+ *         streakReminders:
+ *           type: boolean
+ *
+ *     NotificationLog:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         type:
+ *           type: string
+ *         title:
+ *           type: string
+ *         body:
+ *           type: string
+ *         status:
+ *           type: string
+ *           enum: [pending, success, failed, dead-letter]
+ *         error:
+ *           type: string
+ *           nullable: true
+ *         attemptCount:
+ *           type: integer
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *
+ */
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *
+ *     # ── Sync ──────────────────────────────────────────────────────────────
+ *
+ *     SyncProgressEvent:
+ *       type: object
+ *       required: [idempotencyKey, deviceId, moduleId, progressPercent, clientTimestamp, syncVersion]
+ *       properties:
+ *         idempotencyKey:
+ *           type: string
+ *           description: Unique key to deduplicate events.
+ *         deviceId:
+ *           type: string
+ *         moduleId:
+ *           type: string
+ *           format: uuid
+ *         progressPercent:
+ *           type: number
+ *           minimum: 0
+ *           maximum: 100
+ *         clientTimestamp:
+ *           type: string
+ *           format: date-time
+ *         syncVersion:
+ *           type: integer
+ *
+ *     SyncCompletionEvent:
+ *       type: object
+ *       required: [idempotencyKey, deviceId, moduleId, score, clientTimestamp, syncVersion]
+ *       properties:
+ *         idempotencyKey:
+ *           type: string
+ *         deviceId:
+ *           type: string
+ *         moduleId:
+ *           type: string
+ *           format: uuid
+ *         score:
+ *           type: number
+ *           minimum: 0
+ *           maximum: 100
+ *         clientTimestamp:
+ *           type: string
+ *           format: date-time
+ *         syncVersion:
+ *           type: integer
+ *
+ *     SyncResult:
+ *       type: object
+ *       properties:
+ *         idempotencyKey:
+ *           type: string
+ *         status:
+ *           type: string
+ *           enum: [applied, skipped, rejected]
+ *         reason:
+ *           type: string
+ *           nullable: true
+ *           description: Present when status is skipped or rejected.
+ *
+ *     SyncResponse:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           example: true
+ *         data:
+ *           type: object
+ *           properties:
+ *             results:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/SyncResult'
+ *
+ *     # ── Employer ──────────────────────────────────────────────────────────
+ *
+ *     CandidateSummary:
+ *       type: object
+ *       description: Truncated candidate record returned by the search endpoint.
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         name:
+ *           type: string
+ *         location:
+ *           type: string
+ *           nullable: true
+ *         skills:
  *           type: array
  *           items:
- *             $ref: '#/components/schemas/Credential'
- *         meta:
+ *             type: string
+ *         completions:
+ *           type: integer
+ *         averageScore:
+ *           type: number
+ *         verifiedCredentialCount:
+ *           type: integer
+ *
+ *     EmployerSearchResponse:
+ *       type: object
+ *       properties:
+ *         candidates:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/CandidateSummary'
+ *         pagination:
  *           type: object
  *           properties:
  *             page:
@@ -389,19 +900,121 @@
  *               type: integer
  *             totalPages:
  *               type: integer
- *
- *     VerificationResponse:
- *       type: object
- *       properties:
- *         success:
- *           type: boolean
- *         data:
+ *             hasNext:
+ *               type: boolean
+ *             hasPrev:
+ *               type: boolean
+ *         filters:
  *           type: object
  *           properties:
- *             valid:
- *               type: boolean
- *             credential:
- *               type: object
- *             verification:
- *               type: object
+ *             skills:
+ *               type: array
+ *               items:
+ *                 type: string
+ *             location:
+ *               type: string
+ *               nullable: true
+ *             credentials:
+ *               type: string
+ *         plan:
+ *           type: string
+ *           enum: [starter, pro, enterprise]
+ *
+ *     VerifiedCredentialDetail:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         moduleId:
+ *           type: string
+ *         moduleTitle:
+ *           type: string
+ *         category:
+ *           type: string
+ *         difficulty:
+ *           type: string
+ *         issuedAt:
+ *           type: string
+ *           format: date-time
+ *         onChainId:
+ *           type: string
+ *           nullable: true
+ *         verified:
+ *           type: boolean
+ *
+ *     CandidateProfile:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         name:
+ *           type: string
+ *         location:
+ *           type: string
+ *         joinedAt:
+ *           type: string
+ *           format: date-time
+ *         skills:
+ *           type: array
+ *           items:
+ *             type: string
+ *         completions:
+ *           type: integer
+ *         averageScore:
+ *           type: number
+ *         verifiedCredentials:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/VerifiedCredentialDetail'
+ *         privacy:
+ *           type: object
+ *           properties:
+ *             profileVisibility:
+ *               type: string
+ *               example: public
+ *
+ *     ContactCandidateInput:
+ *       type: object
+ *       required: [candidateId, subject, message]
+ *       properties:
+ *         candidateId:
+ *           type: string
+ *           format: uuid
+ *         subject:
+ *           type: string
+ *           minLength: 3
+ *           maxLength: 120
+ *         message:
+ *           type: string
+ *           minLength: 10
+ *           maxLength: 3000
+ *         channel:
+ *           type: string
+ *           enum: [platform, email, both]
+ *           default: platform
+ *
+ *     ContactCandidateResponse:
+ *       type: object
+ *       properties:
+ *         message:
+ *           type: string
+ *         outreach:
+ *           type: object
+ *           properties:
+ *             id:
+ *               type: string
+ *               format: uuid
+ *             candidateId:
+ *               type: string
+ *               format: uuid
+ *             channel:
+ *               type: string
+ *             status:
+ *               type: string
+ *               example: recorded
+ *             createdAt:
+ *               type: string
+ *               format: date-time
+ *
  */

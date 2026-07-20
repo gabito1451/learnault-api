@@ -29,8 +29,11 @@ const completeModuleSchema = z.object({
  * @openapi
  * /modules:
  *   get:
+ *     operationId: modulesList
  *     summary: List modules with filters and pagination
+ *     description: Authentication is optional. When a valid token is supplied, each module includes the caller's progress.
  *     tags: [Modules]
+ *     security: []
  *     parameters:
  *       - in: query
  *         name: page
@@ -56,13 +59,17 @@ const completeModuleSchema = z.object({
  *           type: string
  *     responses:
  *       200:
- *         description: List of modules retrieved successfully
+ *         description: List of modules
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ModuleList'
  *       400:
  *         description: Invalid query parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 export const listModules = async (req: Request, res: Response) => {
   try {
@@ -166,23 +173,31 @@ export const listModules = async (req: Request, res: Response) => {
  * @openapi
  * /modules/{id}:
  *   get:
+ *     operationId: modulesGetById
  *     summary: Get module details
+ *     description: Authentication is optional. When a valid token is supplied, the response includes the caller's progress.
  *     tags: [Modules]
+ *     security: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
  *           type: string
+ *           format: uuid
  *     responses:
  *       200:
- *         description: Module details retrieved successfully
+ *         description: Module details
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Module'
  *       404:
  *         description: Module not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 export const getModuleById = async (req: Request, res: Response) => {
   try {
@@ -249,7 +264,8 @@ export const getModuleById = async (req: Request, res: Response) => {
  * @openapi
  * /modules/{id}/start:
  *   post:
- *     summary: Start a module
+ *     operationId: modulesStart
+ *     summary: Start tracking progress on a module
  *     tags: [Modules]
  *     security:
  *       - bearerAuth: []
@@ -259,15 +275,41 @@ export const getModuleById = async (req: Request, res: Response) => {
  *         required: true
  *         schema:
  *           type: string
+ *           format: uuid
  *     responses:
  *       201:
  *         description: Module started successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 completionId:
+ *                   type: string
+ *                   format: uuid
+ *                 startedAt:
+ *                   type: string
+ *                   format: date-time
  *       400:
  *         description: Module already started or completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
  *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
  *         description: Module not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 export const startModule = async (req: Request, res: Response) => {
   try {
@@ -329,7 +371,11 @@ export const startModule = async (req: Request, res: Response) => {
  * @openapi
  * /modules/{id}/complete:
  *   post:
- *     summary: Complete a module with quiz answers
+ *     operationId: modulesComplete
+ *     summary: Submit quiz answers and complete a module
+ *     description: >
+ *       The module must have been started first via `POST /modules/{id}/start`.
+ *       A score ≥ 70% qualifies for the XLM reward and triggers a push notification.
  *     tags: [Modules]
  *     security:
  *       - bearerAuth: []
@@ -339,6 +385,7 @@ export const startModule = async (req: Request, res: Response) => {
  *         required: true
  *         schema:
  *           type: string
+ *           format: uuid
  *     requestBody:
  *       required: true
  *       content:
@@ -353,11 +400,23 @@ export const startModule = async (req: Request, res: Response) => {
  *             schema:
  *               $ref: '#/components/schemas/ModuleCompletionResponse'
  *       400:
- *         description: Invalid request or module already completed
+ *         description: Invalid request body, module not started, or already completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
  *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
  *         description: Module not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 export const completeModule = async (req: Request, res: Response) => {
   try {

@@ -1,480 +1,736 @@
-# Learnault API Documentation
+# Learnault API Reference
+
+> **Live spec:** `GET /api-docs` (Swagger UI) or `GET /api-docs/swagger.json`
 
 ## Overview
 
-The Learnault API provides endpoints for user management, learning modules, rewards, and credential verification. The API follows RESTful principles and returns JSON responses.
+The Learnault API is a JSON REST API for a decentralized learn-to-earn platform on Stellar.
 
-**Base URL:** `https://api.learnault.io/v1` (production) or `http://localhost:3001/v1` (development)
+| Item | Value |
+|------|-------|
+| Base URL (production) | `https://api.learnault.io/api/v1` |
+| Base URL (local) | `http://localhost:3000/api/v1` |
+| Auth scheme | JWT Bearer (`Authorization: Bearer <token>`) |
+| Content-Type | `application/json` |
+
+---
 
 ## Authentication
 
-Most endpoints require authentication using a JWT token.
+Obtain a JWT from `POST /auth/login`. Pass it on every protected request:
 
-```txt
-Authorization: Bearer <your-jwt-token>
+```http
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 ```
 
-### Get JWT Token
+JWT payload contains `{ id, email, role }`. Roles are `learner`, `employer`, `admin`.
 
-```txt
-POST /v1/auth/login
+---
+
+## Standard Response Envelopes
+
+### Success
+
+Varies by endpoint — see individual routes. Most use one of:
+
+```json
+{ "message": "...", "data": { ... } }
+```
+```json
+{ "success": true, "data": { ... } }
 ```
 
-**Request:**
+### Error (all 4xx / 5xx)
 
 ```json
 {
-  "email": "user@example.com",
-  "password": "securepassword"
-}
-```
-
-**Response:**
-
-```json
-{
-  "status": "success",
-  "token": "eyJhbGciOiJIUzI1NiIs...",
-  "data": {
-    "id": "usr_123",
-    "email": "user@example.com",
-    "walletAddress": "GABC...123"
+  "success": false,
+  "error": {
+    "message": "Resource not found",
+    "code": 404
   }
 }
 ```
 
-## Endpoints
-
-### Users
-
-#### Get Current User
-
-```txt
-GET /v1/users/me
-```
-
-**Response:**
+Validation errors from the `validate()` middleware:
 
 ```json
 {
-  "status": "success",
-  "data": {
-    "id": "usr_123",
-    "email": "user@example.com",
-    "name": "John Doe",
-    "walletAddress": "GABC...123",
-    "createdAt": "2024-01-01T00:00:00Z",
-    "stats": {
-      "modulesCompleted": 15,
-      "totalEarned": "25.50",
-      "currentStreak": 7
-    }
+  "message": "Validation failed",
+  "errors": {
+    "body": ["Invalid email format"],
+    "params": ["Invalid ID format"]
   }
 }
 ```
 
-#### Update User Profile
+---
 
-```txt
-PATCH /v1/users/me
+## Rate Limiting
+
+Every response includes:
+
+```http
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 97
+X-RateLimit-Reset: 2026-07-19T10:15:00.000Z
 ```
 
-**Request:**
+When exceeded (HTTP 429):
+
+```http
+Retry-After: 60
+```
+
+| Limiter | Applies to | Default window | Default max |
+|---------|-----------|----------------|-------------|
+| `authLimiter` | `/auth/login`, `/auth/resend-verification`, `/auth/forgot-password` | 15 min | 10 |
+| `employerLimiter` | All `/employer/*` routes | 15 min | 500 |
+| `authenticatedLimiter` | All `/sync/*` routes | 15 min | 1000 |
+| `generalLimiter` | Everything else | 15 min | 100 |
+
+All values are overridable via environment variables (`RATE_LIMIT_*_WINDOW_MS`, `RATE_LIMIT_*_MAX`).
+
+---
+
+## Health
+
+### `GET /health`
+
+No authentication. Returns immediately.
+
+```json
+{ "status": "ok", "timestamp": "2026-07-19T10:00:00.000Z" }
+```
+
+---
+
+## Auth — `/auth`
+
+All auth routes are public (no JWT required) unless noted.
+
+### `POST /auth/register`
+
+Register a new user. Queues a verification email.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `email` | string (email) | ✅ | |
+| `password` | string | ✅ | min 8 chars |
+| `username` | string | ✅ | min 3 chars |
+| `role` | `"learner"` \| `"employer"` | ❌ | default `"learner"` |
+
+**Responses**
+
+| Status | Meaning |
+|--------|---------|
+| 201 | User created; JWT and user object returned |
+| 400 | Validation failed |
+| 409 | Email or username already taken |
 
 ```json
 {
-  "name": "John Updated",
-  "preferences": {
-    "language": "fr",
-    "notifications": true
-  }
+  "message": "User registered successfully",
+  "token": "<jwt>",
+  "user": { "id": "...", "email": "...", "username": "...", "role": "learner" }
 }
 ```
 
-### Learning Modules
+---
 
-#### List Modules
+### `POST /auth/login`
 
-```txt
-GET /v1/modules?category=finance&page=1&limit=20
-```
+Rate-limited (10 req / 15 min).
 
-**Query Parameters:**
+**Request body:** `{ "email": "...", "password": "..." }`
 
-- `category` - Filter by category
-- `difficulty` - beginner, intermediate, advanced
-- `language` - en, fr, es, etc.
-- `page` - Page number
-- `limit` - Items per page
+**Responses:** 200 (same shape as register), 400, 401 (invalid credentials)
 
-**Response:**
+---
+
+### `POST /auth/logout`
+
+Stateless — no session is stored server-side. Returns a reminder to clear the token client-side.
+
+**Response:** `200 { "message": "Logged out successfully. Please clear your token client-side." }`
+
+---
+
+### `POST /auth/verify-email`
+
+**Request body:** `{ "token": "<64-char hex string from email>" }`
+
+| Status | Meaning |
+|--------|---------|
+| 200 | Verified (or already verified) |
+| 400 | Invalid, expired, or revoked token |
+
+---
+
+### `POST /auth/resend-verification`
+
+Rate-limited (10 req / 15 min). Always returns 200 to avoid leaking whether an account exists.
+
+**Request body:** `{ "email": "..." }`
+
+**Response:** `200 { "message": "If the account exists, a verification email has been sent." }`
+
+---
+
+### `POST /auth/forgot-password`
+
+Rate-limited (10 req / 15 min). Token expires after 30 minutes. Always returns 200.
+
+**Request body:** `{ "email": "..." }`
+
+**Response:** `200 { "message": "If the account exists, a password reset email has been sent." }`
+
+---
+
+### `POST /auth/reset-password`
+
+On success, all active sessions are revoked and all pending verification tokens are cancelled.
+
+**Request body:** `{ "token": "<64-char hex>", "newPassword": "<min 8 chars>" }`
+
+| Status | Meaning |
+|--------|---------|
+| 200 | Password reset |
+| 400 | Invalid/expired token or weak password |
+
+---
+
+## Users — `/users`
+
+### `GET /users/me` 🔒
+
+Returns the authenticated user's full profile.
 
 ```json
 {
-  "status": "success",
-  "data": [
+  "id": "uuid", "email": "...", "username": "...",
+  "firstName": null, "lastName": null,
+  "bio": null, "avatar": null, "walletAddress": null,
+  "isActive": true, "createdAt": "...", "updatedAt": "..."
+}
+```
+
+---
+
+### `PATCH /users/me` 🔒
+
+Update profile fields. All fields optional.
+
+**Request body** (any subset of):
+
+| Field | Type | Constraints |
+|-------|------|-------------|
+| `username` | string | 3–30 chars, alphanumeric + underscore |
+| `firstName` | string | max 50 |
+| `lastName` | string | max 50 |
+| `bio` | string | max 500 |
+| `avatar` | string (URL) | |
+
+**Response:** `200` full user object (same as `GET /users/me`)
+
+---
+
+### `GET /users/:id`
+
+Public — no auth needed. Returns a reduced public profile.
+
+```json
+{ "id": "...", "username": "...", "firstName": null, "lastName": null, "avatar": null, "role": "learner", "createdAt": "..." }
+```
+
+---
+
+### `PATCH /users/password` 🔒
+
+> ⚠️ **Preview** — the service implementation is stubbed. Will return `500` until completed.
+
+**Request body:** `{ "currentPassword": "...", "newPassword": "..." }`
+
+Password rules: min 8 chars, must contain uppercase, lowercase, digit, and special character (`@$!%*?&`). Must differ from current.
+
+---
+
+### `PATCH /users/wallet` 🔒
+
+> ⚠️ **Preview** — the wallet update may not persist to the database until the service layer is completed.
+
+**Request body:** `{ "walletAddress": "G..." }`
+
+Address must match `^G[A-Z0-9]{55}$`.
+
+---
+
+## Modules — `/modules`
+
+### `GET /modules`
+
+Optional auth — when a valid token is provided, each module includes `userProgress`.
+
+**Query parameters**
+
+| Param | Type | Default |
+|-------|------|---------|
+| `page` | integer | 1 |
+| `limit` | integer | 10 |
+| `category` | string | — |
+| `difficulty` | string | — |
+| `search` | string | — |
+
+**Response `200`**
+
+```json
+{
+  "modules": [
     {
-      "id": "mod_456",
-      "title": "Understanding Stablecoins",
-      "description": "Learn how stablecoins work",
-      "category": "finance",
-      "difficulty": "beginner",
-      "duration": 15,
-      "reward": "0.25",
-      "language": "en",
-      "completions": 1243,
-      "thumbnail": "https://cdn.learnault.io/modules/stablecoins.jpg"
+      "id": "...", "title": "...", "description": "...",
+      "category": "finance", "difficulty": "beginner",
+      "reward": 0.25, "createdAt": "...", "updatedAt": "...",
+      "completionCount": 120,
+      "userProgress": null
     }
   ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 45
-  }
+  "pagination": { "page": 1, "limit": 10, "total": 45, "totalPages": 5, "hasNext": true, "hasPrev": false }
 }
 ```
 
-#### Get Module Details
+---
 
-```txt
-GET /v1/modules/:moduleId
+### `GET /modules/:id`
+
+Optional auth. Same `userProgress` inclusion behaviour.
+
+**Response `200`:** single module object (same fields as list item).  
+**404** if not found.
+
+---
+
+### `POST /modules/:id/start` 🔒
+
+Creates a progress record. Must be called before `complete`.
+
+**Response `201`:**
+```json
+{ "message": "Module started successfully", "completionId": "...", "startedAt": "..." }
 ```
 
-**Response:**
+**400** if already started or completed.
 
+---
+
+### `POST /modules/:id/complete` 🔒
+
+Submit quiz answers. Module must have been started first.
+
+A score ≥ 70% qualifies for the XLM reward and triggers a push notification.
+
+**Request body:**
 ```json
 {
-  "status": "success",
+  "quizAnswers": [
+    { "questionId": "q1", "answer": "B" }
+  ]
+}
+```
+
+**Response `200`:**
+```json
+{
+  "message": "Module completed successfully",
+  "score": 80,
+  "isEligibleForReward": true,
+  "reward": 0.25,
+  "rewardTransaction": "<uuid>",
+  "completedAt": "..."
+}
+```
+
+---
+
+## Credentials — `/credentials`
+
+### `GET /credentials` 🔒
+
+**Query parameters**
+
+| Param | Type | Notes |
+|-------|------|-------|
+| `moduleId` | UUID | filter |
+| `fromDate` | ISO datetime | filter |
+| `toDate` | ISO datetime | filter |
+| `page` | integer | default 1 |
+| `limit` | integer | default 10, max 100 |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "data": [ { "id": "...", "moduleId": "...", "moduleName": "...", "onChainId": null, "issuedAt": "...", "shareableLink": "..." } ],
+  "meta": { "page": 1, "limit": 10, "total": 5, "totalPages": 1, "hasNextPage": false, "hasPrevPage": false }
+}
+```
+
+---
+
+### `GET /credentials/verify/:onChainId`
+
+Public — no auth needed. Looks up by `onChainId` first, falls back to credential UUID.
+
+**Response `200`:**
+```json
+{
+  "success": true,
   "data": {
-    "id": "mod_456",
-    "title": "Understanding Stablecoins",
-    "description": "Learn how stablecoins work",
-    "content": [
-      {
-        "type": "text",
-        "data": "Stablecoins are cryptocurrencies designed to maintain a stable value..."
-      },
-      {
-        "type": "image",
-        "url": "https://cdn.learnault.io/content/stablecoin-diagram.jpg"
-      },
-      {
-        "type": "quiz",
-        "questions": [
-          {
-            "id": "q1",
-            "question": "What is a stablecoin?",
-            "options": [
-              "A volatile cryptocurrency",
-              "A cryptocurrency with stable value",
-              "A type of stock",
-              "A government bond"
-            ],
-            "correctOption": 1
-          }
-        ]
-      }
-    ],
-    "reward": "0.25",
-    "prerequisites": []
+    "valid": true,
+    "credential": { "id": "...", "holderName": "...", "moduleName": "...", "onChainId": "...", "issuedAt": "..." },
+    "verification": { "verifiedAt": "...", "status": "verified", "message": "This credential is valid and has been verified on-chain" }
   }
 }
 ```
 
-#### Submit Module Completion
+**404** if not found.
 
-```txt
-POST /v1/modules/:moduleId/complete
-```
+---
 
-**Request:**
+### `GET /credentials/:id` 🔒
 
-```json
-{
-  "answers": [
-    {
-      "questionId": "q1",
-      "selectedOption": 1
-    }
-  ],
-  "timeSpent": 320
-}
-```
+Returns full credential detail. Returns `401` if the credential belongs to another user.
 
-**Response:**
+---
+
+## Rewards — `/rewards` 🔒
+
+All reward routes require authentication.
+
+### `GET /rewards/balance`
 
 ```json
 {
-  "status": "success",
+  "success": true,
   "data": {
-    "passed": true,
-    "score": 100,
-    "reward": {
-      "amount": "0.25",
-      "asset": "USDC",
-      "transactionHash": "a1b2c3...",
-      "status": "completed"
-    },
-    "credential": {
-      "id": "cred_789",
-      "onChainId": "0x123...",
-      "issuedAt": "2024-01-15T10:30:00Z"
-    }
+    "balance": { "available": 10.5, "pending": 2.0, "lifetime": 25.0 },
+    "updatedAt": "..."
   }
 }
 ```
 
-### Rewards & Wallet
+---
 
-#### Get Wallet Balance
+### `GET /rewards/history`
 
-```txt
-GET /v1/rewards/balance
-```
+**Query parameters**
 
-**Response:**
+| Param | Values | Default |
+|-------|--------|---------|
+| `type` | `module_reward`, `streak_bonus`, `referral_reward`, `withdrawal` | — |
+| `status` | `pending`, `completed`, `failed` | — |
+| `fromDate` | ISO datetime | — |
+| `toDate` | ISO datetime | — |
+| `limit` | 1–100 | 20 |
+| `offset` | ≥ 0 | 0 |
 
+**Response `200`:**
 ```json
 {
-  "status": "success",
-  "data": [
-    {
-      "asset": "USDC",
-      "amount": "45.75",
-      "valueInUSD": "45.75"
-    },
-    {
-      "asset": "XLM",
-      "amount": "125.50",
-      "valueInUSD": "12.55"
-    }
-  ],
-  "totalValueUSD": "58.30"
-}
-```
-
-#### Get Reward History
-
-```txt
-GET /v1/rewards/history?page=1&limit=20
-```
-
-**Response:**
-
-```json
-{
-  "status": "success",
-  "data": [
-    {
-      "id": "tx_abc",
-      "type": "module_reward",
-      "amount": "0.25",
-      "asset": "USDC",
-      "moduleId": "mod_456",
-      "moduleTitle": "Understanding Stablecoins",
-      "timestamp": "2024-01-15T10:30:00Z",
-      "transactionHash": "a1b2c3..."
-    },
-    {
-      "id": "tx_def",
-      "type": "referral_bonus",
-      "amount": "0.50",
-      "asset": "USDC",
-      "referralEmail": "friend@example.com",
-      "timestamp": "2024-01-14T14:20:00Z",
-      "transactionHash": "d4e5f6..."
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 47
-  }
-}
-```
-
-#### Withdraw Funds
-
-```txt
-POST /v1/rewards/withdraw
-```
-
-**Request:**
-
-```json
-{
-  "amount": "25.00",
-  "asset": "USDC",
-  "destination": "GA...", // Stellar address or mobile money identifier
-  "method": "stellar" // or "mobile_money"
-}
-```
-
-**Response:**
-
-```json
-{
-  "status": "success",
+  "success": true,
   "data": {
-    "withdrawalId": "wd_123",
-    "amount": "25.00",
-    "asset": "USDC",
-    "fee": "0.01",
-    "netAmount": "24.99",
-    "status": "processing",
-    "estimatedCompletion": "2024-01-15T12:30:00Z"
+    "transactions": [ { "id": "...", "type": "module_reward", "status": "completed", "amount": 0.25, "moduleId": "...", "stellarTxHash": null, "createdAt": "...", "completedAt": "..." } ],
+    "pagination": { "total": 15, "limit": 20, "offset": 0, "hasMore": false }
   }
 }
 ```
 
-### Credentials
+---
 
-#### Get User Credentials
+### `POST /rewards/withdraw`
 
-```txt
-GET /v1/credentials
+**Request body:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `walletAddress` | string | ✅ | Stellar address matching `^G[A-Z0-9]{50,55}$` |
+| `amount` | number | ✅ | XLM, must be > 0 |
+| `memo` | string | ❌ | |
+
+**Response `201`:**
+```json
+{
+  "success": true,
+  "message": "Withdrawal processed successfully",
+  "data": { "transactionId": "...", "amount": 5.0, "stellarTxHash": "...", "status": "completed", "requestedAt": "...", "completedAt": "..." }
+}
 ```
 
-**Response:**
+**400** for invalid address, zero/negative amount, or insufficient balance.
+
+---
+
+## Referrals — `/referrals` 🔒
+
+All referral routes require authentication.
+
+### `POST /referrals/code`
+
+Generate (or retrieve existing) referral code for the authenticated user.
+
+- Returns `200` if the user already has a code.
+- Returns `201` if a new 8-character hex code was created.
+
+```json
+{ "success": true, "message": "...", "data": { "code": "A1B2C3D4" } }
+```
+
+---
+
+### `POST /referrals/apply`
+
+Apply a referral code. Cannot apply your own code or apply more than once.
+
+**Request body:** `{ "code": "A1B2C3D4" }`
+
+| Status | Meaning |
+|--------|---------|
+| 201 | Referral applied |
+| 400 | Missing code, self-referral, or code not found |
+| 409 | Already used a referral code |
+
+---
+
+### `GET /referrals/stats`
 
 ```json
 {
-  "status": "success",
-  "data": [
+  "success": true,
+  "data": {
+    "totalReferrals": 3,
+    "activeReferrals": 2,
+    "earnedBonuses": 10.0,
+    "pendingBonuses": 5.0
+  }
+}
+```
+
+`activeReferrals` = referrees who have completed at least one module.  
+`pendingBonuses` = (total − paid) × 5 XLM per referral.
+
+---
+
+## Notifications — `/notifications` 🔒
+
+All notification routes require authentication.
+
+### `POST /notifications/devices`
+
+Register a Firebase device token for push notifications.
+
+**Request body:**
+
+| Field | Type | Required |
+|-------|------|----------|
+| `token` | string | ✅ |
+| `platform` | `"ios"` \| `"android"` \| `"web"` | ✅ |
+
+**Response `201`:** device token record.
+
+---
+
+### `PATCH /notifications/preferences`
+
+At least one field must be provided.
+
+**Request body** (any subset of):
+
+| Field | Type |
+|-------|------|
+| `rewardReceipt` | boolean |
+| `quizPassFail` | boolean |
+| `streakReminders` | boolean |
+
+---
+
+### `GET /notifications/delivery-status`
+
+**Query parameters:** `limit` (default 20, max 100), `status` (`pending` \| `success` \| `failed` \| `dead-letter`).
+
+```json
+{
+  "data": [ { "id": "...", "type": "quizPassFail", "title": "Quiz Passed!", "body": "...", "status": "success", "error": null, "attemptCount": 1, "createdAt": "..." } ],
+  "count": 1
+}
+```
+
+---
+
+## Sync — `/sync` 🔒
+
+All sync routes require authentication and are subject to the `authenticatedLimiter` (1000 req / 15 min).
+
+### `POST /sync/progress`
+
+Upload batched offline progress events. Each event is deduplicated by `idempotencyKey`. Events with a stale `syncVersion` are skipped without error.
+
+**Request body:**
+```json
+{
+  "events": [
     {
-      "id": "cred_789",
-      "moduleId": "mod_456",
-      "moduleTitle": "Understanding Stablecoins",
-      "issuedAt": "2024-01-15T10:30:00Z",
-      "onChainId": "0x123...",
-      "verifiableUrl": "https://verify.learnault.io/cred_789"
+      "idempotencyKey": "device-abc-mod-xyz-1",
+      "deviceId": "device-abc",
+      "moduleId": "<uuid>",
+      "progressPercent": 60,
+      "clientTimestamp": "2026-07-19T09:00:00.000Z",
+      "syncVersion": 3
     }
   ]
 }
 ```
 
-#### Verify Credential
-
-```txt
-GET /v1/credentials/verify/:onChainId
-```
-
-**Response:**
-
+**Response `200`:**
 ```json
 {
-  "status": "success",
+  "success": true,
   "data": {
-    "valid": true,
-    "credential": {
-      "userId": "usr_123",
-      "userName": "John Doe",
-      "moduleId": "mod_456",
-      "moduleTitle": "Understanding Stablecoins",
-      "issuedAt": "2024-01-15T10:30:00Z",
-      "issuer": "Learnault"
-    }
+    "results": [
+      { "idempotencyKey": "device-abc-mod-xyz-1", "status": "applied" }
+    ]
   }
 }
 ```
 
-### Employer Endpoints (B2B)
+Each result has `status`: `applied` | `skipped` | `rejected`, plus an optional `reason`.
 
-#### Search Talent
+---
 
-```txt
-GET /v1/employer/search?skills=finance,defi&location=kenya
-```
+### `POST /sync/completions`
 
-**Authentication:** Requires employer API key
+Reconcile offline quiz/completion attempts. If the user already has a completion with an equal or higher score, the event is skipped. A higher score updates the existing record.
 
-**Response:**
-
+**Request body:**
 ```json
 {
-  "status": "success",
-  "data": [
+  "events": [
     {
-      "userId": "usr_123",
-      "anonymousId": "anon_456", // For privacy until contact
-      "skills": [
-        {
-          "name": "Financial Literacy",
-          "level": "advanced",
-          "modules": 12,
-          "verified": true
-        }
-      ],
-      "matchScore": 95,
-      "availableForHire": true
+      "idempotencyKey": "device-abc-comp-xyz-1",
+      "deviceId": "device-abc",
+      "moduleId": "<uuid>",
+      "score": 85,
+      "clientTimestamp": "2026-07-19T09:05:00.000Z",
+      "syncVersion": 1
+    }
+  ]
+}
+```
+
+Response shape identical to `POST /sync/progress`.
+
+---
+
+## Employer — `/employer` 🔒 (employer role required)
+
+All employer routes require authentication with `role: employer`. An `employerLimiter` (500 req / 15 min) is applied.
+
+Plan tier is read from the `x-employer-plan` request header. Valid values: `starter` (default), `pro`, `enterprise`.
+
+### `GET /employer/search`
+
+Search the learner talent pool.
+
+**Query parameters**
+
+| Param | Type | Default | Notes |
+|-------|------|---------|-------|
+| `page` | integer | 1 | |
+| `limit` | integer | 20 | Capped by plan: starter ≤ 10, pro ≤ 50, enterprise ≤ 100 |
+| `skills` | string | — | Comma-separated keywords, e.g. `finance,defi` |
+| `location` | string | — | |
+| `credentials` | `any` \| `verified` \| `none` | `any` | |
+| `search` | string | — | Free-text search on username/email |
+
+**Request header:** `x-employer-plan: starter | pro | enterprise`
+
+**Response `200`:**
+```json
+{
+  "candidates": [
+    {
+      "id": "...", "name": "alice42", "location": "lagos",
+      "skills": ["finance", "defi"],
+      "completions": 5, "averageScore": 82.4,
+      "verifiedCredentialCount": 2
     }
   ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 47
-  }
+  "pagination": { "page": 1, "limit": 10, "total": 3, "totalPages": 1, "hasNext": false, "hasPrev": false },
+  "filters": { "skills": ["finance"], "location": null, "credentials": "any" },
+  "plan": "starter"
 }
 ```
 
-## Error Handling
+**400** if `limit` exceeds plan maximum.
 
-The API uses conventional HTTP response codes:
+---
 
-- `200` - Success
-- `201` - Created
-- `400` - Bad request
-- `401` - Unauthorized
-- `403` - Forbidden
-- `404` - Not found
-- `429` - Too many requests
-- `500` - Internal server error
+### `GET /employer/candidates/:id`
 
-Error response format:
+Full candidate profile with all verified credentials.
 
+**403** if candidate profile is private or caller is not an employer.  
+**404** if candidate not found or has no module completions.
+
+---
+
+### `POST /employer/contact`
+
+Record a candidate outreach attempt. Requires **pro** or **enterprise** plan — **starter returns HTTP 402**.
+
+**Request header:** `x-employer-plan: pro` (or `enterprise`)
+
+**Request body:**
+
+| Field | Type | Required | Constraints |
+|-------|------|----------|-------------|
+| `candidateId` | UUID | ✅ | |
+| `subject` | string | ✅ | 3–120 chars |
+| `message` | string | ✅ | 10–3000 chars |
+| `channel` | `"platform"` \| `"email"` \| `"both"` | ❌ | default `"platform"` |
+
+**Response `201`:**
 ```json
 {
-  "status": "error",
-  "error": {
-    "code": "RESOURCE_NOT_FOUND",
-    "message": "The requested module was not found",
-    "details": {
-      "moduleId": "mod_invalid"
-    }
-  }
+  "message": "Candidate outreach recorded",
+  "outreach": { "id": "...", "candidateId": "...", "channel": "platform", "status": "recorded", "createdAt": "..." }
 }
 ```
 
-## Rate Limiting
+---
 
-- Public endpoints: 60 requests per minute
-- Authenticated endpoints: 120 requests per minute
-- Employer endpoints: Based on subscription tier
+## Unimplemented / Stubbed Routes
 
-Rate limit headers:
+The following routes are wired but not fully implemented:
 
-```txt
-X-RateLimit-Limit: 60
-X-RateLimit-Remaining: 58
-X-RateLimit-Reset: 1627583492
-```
+| Route | Status |
+|-------|--------|
+| `PATCH /users/password` | Service method throws "Not implemented" — returns 500 |
+| `PATCH /users/wallet` | Service method uses mock data — changes do not persist |
 
-## Webhooks
+These are marked as **Preview** in the OpenAPI spec (`/api-docs`).
 
-You can register webhooks to receive real-time events:
+---
 
-- `user.completed_module`
-- `reward.issued`
-- `credential.verified`
+## Error Code Reference
 
-See [Webhook Documentation](./WEBHOOKS.md) for details.
-
-## SDKs
-
-## Support
-
-For API support, please:
-
-- Check our [API status page](https://status.learnault.io)
-- Join our [Discord](https://discord.gg) #api channel
-- Email: learnault@toneflix.net
+| HTTP | Typical cause |
+|------|--------------|
+| 400 | Validation failed, malformed body, business rule violation |
+| 401 | Missing, expired, or invalid JWT |
+| 402 | Employer plan upgrade required |
+| 403 | Authenticated but insufficient role or resource is private |
+| 404 | Resource not found |
+| 409 | Conflict (duplicate email, already applied referral, etc.) |
+| 429 | Rate limit exceeded — see `Retry-After` header |
+| 500 | Internal server error (includes not-yet-implemented stubs) |

@@ -145,6 +145,79 @@ function isEmployer(req: Request) {
   return req.user?.role === 'employer'
 }
 
+/**
+ * @openapi
+ * /employer/search:
+ *   get:
+ *     operationId: employerSearchTalent
+ *     summary: Search learner talent pool with skill and location filters
+ *     description: >
+ *       Requires `employer` role. Results are filtered by plan tier:
+ *       starter ≤ 10 results/page, pro ≤ 50, enterprise ≤ 100.
+ *       Plan is read from the `x-employer-plan` request header (defaults to `starter`).
+ *     tags: [Employer]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *         description: Capped by plan tier.
+ *       - in: query
+ *         name: skills
+ *         schema:
+ *           type: string
+ *         description: Comma-separated skill keywords (e.g. `finance,defi`).
+ *       - in: query
+ *         name: location
+ *         schema:
+ *           type: string
+ *         description: Location string to match against candidate profile.
+ *       - in: query
+ *         name: credentials
+ *         schema:
+ *           type: string
+ *           enum: [any, verified, none]
+ *           default: any
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Free-text search on username or email.
+ *       - in: header
+ *         name: x-employer-plan
+ *         schema:
+ *           type: string
+ *           enum: [starter, pro, enterprise]
+ *         description: Employer subscription tier (defaults to `starter` if absent or invalid).
+ *     responses:
+ *       200:
+ *         description: Paginated list of matching candidates
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/EmployerSearchResponse'
+ *       400:
+ *         description: Invalid query parameters or limit exceeds plan maximum
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Employer role required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export const searchTalent = async (req: Request, res: Response) => {
   if (!isEmployer(req)) {
     return res.status(403).json({ message: 'Employer account required' })
@@ -270,6 +343,45 @@ export const searchTalent = async (req: Request, res: Response) => {
   })
 }
 
+/**
+ * @openapi
+ * /employer/candidates/{id}:
+ *   get:
+ *     operationId: employerGetCandidateProfile
+ *     summary: Get a candidate's full profile with verified credentials
+ *     description: >
+ *       Requires `employer` role. Returns 404 if the candidate has no module
+ *       completions. Returns 403 if the candidate has opted out of visibility.
+ *     tags: [Employer]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Candidate profile with verified credentials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CandidateProfile'
+ *       403:
+ *         description: Employer role required or candidate profile is private
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Candidate not found or has no completions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export const getCandidateProfile = async (req: Request, res: Response) => {
   if (!isEmployer(req)) {
     return res.status(403).json({ message: 'Employer account required' })
@@ -325,6 +437,65 @@ export const getCandidateProfile = async (req: Request, res: Response) => {
   })
 }
 
+/**
+ * @openapi
+ * /employer/contact:
+ *   post:
+ *     operationId: employerContactCandidate
+ *     summary: Record a candidate outreach attempt
+ *     description: >
+ *       Requires `employer` role and at least a **pro** plan (`x-employer-plan: pro`
+ *       or `enterprise`). Starter plan returns HTTP 402. The outreach is logged
+ *       internally; no message is actually delivered to the candidate at this time.
+ *     tags: [Employer]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: x-employer-plan
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [pro, enterprise]
+ *         description: Must be `pro` or `enterprise`; `starter` returns 402.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ContactCandidateInput'
+ *     responses:
+ *       201:
+ *         description: Outreach recorded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ContactCandidateResponse'
+ *       400:
+ *         description: Invalid request body
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       402:
+ *         description: Plan upgrade required (starter plan cannot use contact)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Employer role required or candidate profile is private
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Candidate not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export const contactCandidate = async (req: Request, res: Response) => {
   if (!isEmployer(req)) {
     return res.status(403).json({ message: 'Employer account required' })

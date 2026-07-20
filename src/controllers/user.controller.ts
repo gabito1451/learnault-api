@@ -6,7 +6,8 @@ export class UserController {
    * @openapi
    * /users/me:
    *   get:
-   *     summary: Get current authenticated user profile
+   *     operationId: usersGetMe
+   *     summary: Get the authenticated user's profile
    *     tags: [Users]
    *     security:
    *       - bearerAuth: []
@@ -19,8 +20,16 @@ export class UserController {
    *               $ref: '#/components/schemas/User'
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    *       404:
    *         description: User not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
 
   async getCurrentUser (req: Request, res: Response): Promise<void> {
@@ -57,9 +66,10 @@ export class UserController {
 
   /**
    * @openapi
-   * /users/profile:
-   *   put:
-   *     summary: Update user profile
+   * /users/me:
+   *   patch:
+   *     operationId: usersUpdateProfile
+   *     summary: Update the authenticated user's profile
    *     tags: [Users]
    *     security:
    *       - bearerAuth: []
@@ -68,7 +78,7 @@ export class UserController {
    *       content:
    *         application/json:
    *           schema:
-   *             $ref: '#/components/schemas/UpdateUser'
+   *             $ref: '#/components/schemas/UpdateUserInput'
    *     responses:
    *       200:
    *         description: Profile updated successfully
@@ -78,8 +88,16 @@ export class UserController {
    *               $ref: '#/components/schemas/User'
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    *       500:
    *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
 
   async updateProfile (req: Request, res: Response): Promise<void> {
@@ -110,6 +128,35 @@ export class UserController {
     }
   }
 
+  /**
+   * @openapi
+   * /users/{id}:
+   *   get:
+   *     operationId: usersGetById
+   *     summary: Get a user's public profile by ID
+   *     tags: [Users]
+   *     security: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: Public user info
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/PublicUser'
+   *       404:
+   *         description: User not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
+   */
   async getUserById (req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params
@@ -138,6 +185,46 @@ export class UserController {
     }
   }
 
+  /**
+   * @openapi
+   * /users/password:
+   *   patch:
+   *     operationId: usersChangePassword
+   *     summary: Change the authenticated user's password
+   *     description: >
+   *       ⚠️ **Preview** — the underlying service method is not yet fully implemented.
+   *       Calling this endpoint will return a 500 error until the service is completed.
+   *     tags: [Users]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             $ref: '#/components/schemas/ChangePasswordInput'
+   *     responses:
+   *       200:
+   *         description: Password changed successfully.
+   *       400:
+   *         description: Current password is incorrect or validation failed.
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
+   *       401:
+   *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
+   *       500:
+   *         description: Not yet implemented.
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
+   */
   async changePassword (req: Request, res: Response): Promise<void> {
     try {
       const userId = (req as any).user?.id
@@ -171,8 +258,13 @@ export class UserController {
   /**
    * @openapi
    * /users/wallet:
-   *   put:
-   *     summary: Update user Stellar wallet address
+   *   patch:
+   *     operationId: usersUpdateWallet
+   *     summary: Update the authenticated user's Stellar wallet address
+   *     description: >
+   *       ⚠️ **Preview** — the underlying service method is not yet fully implemented.
+   *       The wallet update is accepted but may not persist to the database until the
+   *       service layer is completed.
    *     tags: [Users]
    *     security:
    *       - bearerAuth: []
@@ -181,26 +273,32 @@ export class UserController {
    *       content:
    *         application/json:
    *           schema:
-   *             type: object
-   *             required:
-   *               - walletAddress
-   *             properties:
-   *               walletAddress:
-   *                 type: string
-   *                 example: GABC123456789012345678901234567890123456789012345678901234567890
+   *             $ref: '#/components/schemas/UpdateWalletInput'
    *     responses:
    *       200:
-   *         description: Wallet address updated successfully
+   *         description: Wallet address updated successfully.
    *         content:
    *           application/json:
    *             schema:
    *               $ref: '#/components/schemas/User'
    *       400:
-   *         description: Invalid Stellar wallet address
+   *         description: Invalid Stellar wallet address format.
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    *       500:
    *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
 
   async updateWalletAddress (req: Request, res: Response): Promise<void> {

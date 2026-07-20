@@ -14,7 +14,8 @@ export class RewardController {
    * @openapi
    * /rewards/balance:
    *   get:
-   *     summary: Get current user reward balance
+   *     operationId: rewardsGetBalance
+   *     summary: Get the authenticated user's reward balance
    *     tags: [Rewards]
    *     security:
    *       - bearerAuth: []
@@ -27,6 +28,10 @@ export class RewardController {
    *               $ref: '#/components/schemas/RewardBalance'
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   getBalance = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
@@ -56,7 +61,8 @@ export class RewardController {
    * @openapi
    * /rewards/history:
    *   get:
-   *     summary: Get transaction history
+   *     operationId: rewardsGetHistory
+   *     summary: Get the authenticated user's transaction history
    *     tags: [Rewards]
    *     security:
    *       - bearerAuth: []
@@ -86,11 +92,13 @@ export class RewardController {
    *         schema:
    *           type: integer
    *           default: 20
+   *           maximum: 100
    *       - in: query
    *         name: offset
    *         schema:
    *           type: integer
    *           default: 0
+   *           minimum: 0
    *     responses:
    *       200:
    *         description: Transaction history retrieved successfully
@@ -100,6 +108,10 @@ export class RewardController {
    *               $ref: '#/components/schemas/TransactionHistory'
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   getHistory = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
@@ -199,7 +211,11 @@ export class RewardController {
    * @openapi
    * /rewards/withdraw:
    *   post:
-   *     summary: Process withdrawal request
+   *     operationId: rewardsWithdraw
+   *     summary: Submit a withdrawal request
+   *     description: >
+   *       Validates the Stellar wallet address (pattern `^G[A-Z0-9]{50,55}$`),
+   *       checks that `amount > 0`, and verifies sufficient balance before processing.
    *     tags: [Rewards]
    *     security:
    *       - bearerAuth: []
@@ -218,8 +234,16 @@ export class RewardController {
    *               $ref: '#/components/schemas/WithdrawalResponse'
    *       400:
    *         description: Invalid input or insufficient balance
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   withdraw = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {

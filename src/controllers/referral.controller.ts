@@ -12,17 +12,33 @@ export class ReferralController {
    * @openapi
    * /referrals/code:
    *   post:
-   *     summary: Generate a unique referral code for the authenticated user
+   *     operationId: referralsGenerateCode
+   *     summary: Generate (or retrieve existing) referral code for the authenticated user
+   *     description: >
+   *       If the user already has a code, returns 200 with the existing code.
+   *       Otherwise creates a new unique 8-character hex code and returns 201.
    *     tags: [Referrals]
    *     security:
    *       - bearerAuth: []
    *     responses:
+   *       200:
+   *         description: Referral code already exists; returned as-is.
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ReferralCodeResponse'
    *       201:
-   *         description: Referral code generated
-   *       409:
-   *         description: User already has a referral code
+   *         description: Referral code generated successfully.
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ReferralCodeResponse'
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   generateCode = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = (req as any).user?.id
@@ -55,6 +71,7 @@ export class ReferralController {
    * @openapi
    * /referrals/apply:
    *   post:
+   *     operationId: referralsApplyCode
    *     summary: Apply a referral code during signup or onboarding
    *     tags: [Referrals]
    *     security:
@@ -64,18 +81,32 @@ export class ReferralController {
    *       content:
    *         application/json:
    *           schema:
-   *             type: object
-   *             required: [code]
-   *             properties:
-   *               code:
-   *                 type: string
+   *             $ref: '#/components/schemas/ApplyReferralInput'
    *     responses:
    *       201:
    *         description: Referral applied successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ApplyReferralResponse'
    *       400:
-   *         description: Invalid or self-referral code
+   *         description: Missing code, self-referral, or code not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    *       409:
    *         description: User has already used a referral code
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
+   *       401:
+   *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   applyCode = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = (req as any).user?.id
@@ -120,15 +151,24 @@ export class ReferralController {
    * @openapi
    * /referrals/stats:
    *   get:
-   *     summary: Get referral stats for the authenticated user
+   *     operationId: referralsGetStats
+   *     summary: Get referral statistics for the authenticated user
    *     tags: [Referrals]
    *     security:
    *       - bearerAuth: []
    *     responses:
    *       200:
    *         description: Referral stats retrieved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ReferralStats'
    *       401:
    *         description: Unauthorized
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   getStats = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = (req as any).user?.id
