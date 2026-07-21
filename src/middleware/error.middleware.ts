@@ -15,12 +15,17 @@ export const errorHandler = (
   res: Response,
 ): void => {
   let error = err
+  
+  // Get request ID for correlation
+  const requestId = req.requestId || 'unknown'
 
   logger.error({
     message: err.message,
     stack: err.stack,
     path: req.path,
     method: req.method,
+    requestId,
+    actor: req.actor ? `${req.actor.role}:${req.actor.id}` : 'anonymous',
     timestamp: new Date().toISOString(),
   })
 
@@ -39,6 +44,7 @@ export const errorHandler = (
       message: (error as AppError).message,
       code: (error as AppError).statusCode || 'INTERNAL_SERVER_ERROR',
     },
+    requestId, // Include request ID in error response for correlation
   }
 
   if (isDevelopment && err.stack) {
@@ -70,11 +76,13 @@ export const notFoundHandler = (
   next: NextFunction
 ): void => {
   const notFound = new NotFoundError(`Cannot ${req.method} ${req.path}`)
+  const requestId = req.requestId || 'unknown'
 
   logger.warn({
     message: 'Not Found',
     path: req.path,
     method: req.method,
+    requestId,
     timestamp: new Date().toISOString(),
   })
 
@@ -90,12 +98,15 @@ export const asyncHandler = (
 ) => {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch((error) => {
+      const requestId = req.requestId || 'unknown'
+      
       logger.error({
         message: 'Async error caught',
         error: error.message,
         stack: error.stack,
         path: req.path,
         method: req.method,
+        requestId,
         timestamp: new Date().toISOString(),
       })
 

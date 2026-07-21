@@ -9,7 +9,9 @@ import morgan from 'morgan'
 import swaggerUi from 'swagger-ui-express'
 import { specs } from './config/swagger'
 import routes from './routes'
+import healthRoutes from './routes/health.routes'
 import { errorHandler, notFoundHandler } from './middleware/error.middleware'
+import { requestContext } from './middleware/request-context'
 
 const app: express.Application = express()
 
@@ -18,6 +20,10 @@ app.use(cors())
 app.use(helmet({
   contentSecurityPolicy: false, // Disable CSP for Swagger UI to work correctly
 }))
+
+// Request context middleware - must be early to track all requests
+app.use(requestContext)
+
 app.use(morgan('dev'))
 
 // API routes
@@ -26,14 +32,18 @@ app.use('/api', routes)
 // Swagger documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs))
 
-// Health check endpoint
+// Health check routes (liveness and readiness)
+app.use('/health', healthRoutes)
+
+// Legacy health check endpoint (deprecated, use /health/live instead)
 /**
  * @openapi
  * /health:
  *   get:
  *     operationId: healthCheck
- *     summary: Service health check
- *     description: Returns HTTP 200 when the server is running. No authentication required.
+ *     summary: Service health check (deprecated)
+ *     description: Returns HTTP 200 when the server is running. Use /health/live or /health/ready instead.
+ *     deprecated: true
  *     tags: [Health]
  *     security: []
  *     responses:
@@ -51,7 +61,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs))
  *                   type: string
  *                   format: date-time
  */
-app.get('/health', (req, res) => {
+app.get('/health-legacy', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
