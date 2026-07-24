@@ -40,7 +40,6 @@ model User {
   dataExports     DataExportRequest[]
   deletionRequests AccountDeletionRequest[]
   otpChallenges   OtpChallenge[]
-  wallet          Wallet?
 
   @@map("users")
 }
@@ -418,36 +417,4 @@ model AccountDeletionRequest {
   @@index([userId, status])
   @@index([status, scheduledFor])
   @@map("account_deletion_requests")
-}
-
-model ManagedKey {
-  id            String   @id @default(uuid())
-  provider      String   // e.g. "aws_kms", "gcp_kms", "fake"
-  keyId         String   // opaque provider-side key identifier
-  keyVersion    String?  // key material version for rotation tracking
-  envelope      String?  // JSON – encrypted envelope metadata (never plaintext secrets)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  wallet        Wallet?
-
-  @@map("managed_keys")
-}
-
-model Wallet {
-  id              String       @id @default(uuid())
-  userId          String       @unique
-  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  network         String       // TESTNET, MAINNET
-  custody         String       // MANAGED, EXTERNAL
-  publicKey       String       @unique
-  status          String       @default("PROVISIONING") // PROVISIONING, ACTIVE, FAILED, EXPORT, MIGRATED, DISABLED
-  managedKeyId    String?      @unique
-  managedKey      ManagedKey?  @relation(fields: [managedKeyId], references: [id], onDelete: SetNull)
-  statusChangedAt DateTime?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-
-  @@index([userId, status])
-  @@map("wallets")
 }
