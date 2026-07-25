@@ -1,6 +1,7 @@
 import winston from 'winston'
 
 const isProduction = process.env.NODE_ENV === 'production'
+const isTest = process.env.NODE_ENV === 'test'
 
 // JSON format for production (better for log aggregation)
 const jsonFormat = winston.format.combine(
@@ -20,13 +21,14 @@ const devFormat = winston.format.combine(
       metaStr = JSON.stringify(meta, null, 2)
     }
     
-return `${timestamp} [${level}]: ${message}${metaStr ? '\n' + metaStr : ''}`
+    return `${timestamp} [${level}]: ${message}${metaStr ? '\n' + metaStr : ''}`
   })
 )
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: isProduction ? jsonFormat : devFormat,
+  silent: isTest,
   transports: [
     new winston.transports.Console({
       stderrLevels: ['error'],
