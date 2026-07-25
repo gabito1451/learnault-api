@@ -68,7 +68,8 @@ export class AuthService {
     static generateVerificationToken(): { rawToken: string; tokenHash: string } {
         const rawToken = crypto.randomBytes(32).toString('hex')
         const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
-        return { rawToken, tokenHash }
+        
+return { rawToken, tokenHash }
     }
 
     static buildVerificationEmail(rawToken: string): { subject: string; body: string } {
@@ -89,7 +90,8 @@ export class AuthService {
   <p>If you did not create this account, please ignore this email.</p>
 </body>
 </html>`
-        return { subject, body }
+        
+return { subject, body }
     }
 
     static async register(input: RegisterInput, ipAddress?: string, userAgent?: string) {

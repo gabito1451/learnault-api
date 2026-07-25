@@ -134,7 +134,8 @@ export class AuthController {
                     error: 'Validation failed',
                     details: validation.error.format()
                 })
-                return
+                
+return
             }
 
             const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
@@ -151,7 +152,8 @@ export class AuthController {
         } catch (error) {
             if (error instanceof UserConflictError) {
                 res.status(409).json({ error: error.message })
-                return
+                
+return
             }
             console.error('Registration error:', error)
             res.status(500).json({ error: 'Internal server error during registration' })
@@ -430,7 +432,8 @@ export class AuthController {
                     error: 'Validation failed',
                     details: validation.error.format()
                 })
-                return
+                
+return
             }
 
             const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
@@ -447,11 +450,13 @@ export class AuthController {
         } catch (error) {
             if (error instanceof AuthenticationError) {
                 res.status(401).json({ error: error.message })
-                return
+                
+return
             }
             if (error instanceof AccountStatusError) {
                 res.status(error.statusCode).json(error.body)
-                return
+                
+return
             }
             console.error('Login error:', error)
             res.status(500).json({ error: 'Internal server error during login' })
