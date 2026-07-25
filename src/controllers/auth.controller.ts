@@ -8,6 +8,7 @@ import { UserRole } from '../types/user.types'
 import { emailService } from '../services/email.service'
 import { otpService, normalizePhone, OtpPurpose } from '../services/otp.service'
 import logger from '../utils/logger'
+import { AuthService, UserConflictError, AuthenticationError, AccountStatusError } from '../services/auth.service'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-default-secret'
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d'
@@ -133,70 +134,25 @@ export class AuthController {
                     error: 'Validation failed',
                     details: validation.error.format()
                 })
-
                 return
             }
 
-            const { email, password, username, role } = validation.data
+            const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+                || (req.headers['x-real-ip'] as string)
+                || req.socket.remoteAddress
+                || 'unknown'
+            const userAgent = req.headers['user-agent'] || 'unknown'
 
-            const existingUser = await prisma.user.findFirst({
-                where: {
-                    OR: [
-                        { email },
-                        { username }
-                    ]
-                }
-            })
-
-            if (existingUser) {
-                res.status(409).json({ error: 'User with this email or username already exists' })
-
-                return
-            }
-
-            const salt = await bcrypt.genSalt(10)
-            const hashedPassword = await bcrypt.hash(password, salt)
-
-            const user = await prisma.user.create({
-                data: {
-                    email,
-                    username,
-                    password: hashedPassword,
-                    role: (role as any) || UserRole.LEARNER,
-                }
-            })
-
-            // Issue verification token
-            const { rawToken, tokenHash } = generateVerificationToken()
-            const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_MS)
-
-            await prisma.verificationToken.create({
-                data: {
-                    userId: user.id,
-                    tokenHash,
-                    expiresAt,
-                }
-            })
-
-            // Queue verification email via outbox
-            const { subject, body } = buildVerificationEmail(email, rawToken)
-            emailService.queueEmail(user.id, email, subject, body).catch(err =>
-                logger.error('[Auth] Failed to queue verification email:', err)
-            )
-
-            const token = this.generateToken(user.id, user.role)
-
+            const result = await AuthService.register(validation.data, ipAddress, userAgent)
             res.status(201).json({
                 message: 'User registered successfully',
-                token,
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    username: user.username,
-                    role: user.role
-                }
+                ...result
             })
         } catch (error) {
+            if (error instanceof UserConflictError) {
+                res.status(409).json({ error: error.message })
+                return
+            }
             console.error('Registration error:', error)
             res.status(500).json({ error: 'Internal server error during registration' })
         }
@@ -474,54 +430,29 @@ export class AuthController {
                     error: 'Validation failed',
                     details: validation.error.format()
                 })
-
                 return
             }
 
-            const { email, password } = validation.data
+            const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+                || (req.headers['x-real-ip'] as string)
+                || req.socket.remoteAddress
+                || 'unknown'
+            const userAgent = req.headers['user-agent'] || 'unknown'
 
-            const user = await prisma.user.findUnique({
-                where: { email }
-            })
-
-            if (!user) {
-                res.status(401).json({ error: 'Invalid credentials' })
-
-                return
-            }
-
-            const isMatch = await bcrypt.compare(password, user.password)
-            if (!isMatch) {
-                res.status(401).json({ error: 'Invalid credentials' })
-
-                return
-            }
-
-            const statusError = await this.getAccountStatusError(user)
-            if (statusError) {
-                res.status(statusError.statusCode).json(statusError.body)
-
-                return
-            }
-
-            await prisma.user.update({
-                where: { id: user.id },
-                data: { lastLoginAt: new Date() }
-            })
-
-            const token = this.generateToken(user.id, user.role)
-
+            const result = await AuthService.login(validation.data, ipAddress, userAgent)
             res.status(200).json({
                 message: 'Login successful',
-                token,
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    username: user.username,
-                    role: user.role
-                }
+                ...result
             })
         } catch (error) {
+            if (error instanceof AuthenticationError) {
+                res.status(401).json({ error: error.message })
+                return
+            }
+            if (error instanceof AccountStatusError) {
+                res.status(error.statusCode).json(error.body)
+                return
+            }
             console.error('Login error:', error)
             res.status(500).json({ error: 'Internal server error during login' })
         }

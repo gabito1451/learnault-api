@@ -5,9 +5,30 @@ import prisma from '../src/config/database'
 import bcrypt from 'bcryptjs'
 import { emailService } from '../src/services/email.service'
 import { otpService } from '../src/services/otp.service'
+import { AuthService, UserConflictError, AccountStatusError, AuthenticationError } from '../src/services/auth.service'
 
 const mockTokenHash = 'abc123def456hash'
 const mockRawToken = 'aaabbbcccddd00112233445566778899aabbccddeeff00112233445566778899'
+
+vi.mock('../src/services/auth.service', () => {
+    return {
+        AuthService: {
+            register: vi.fn(),
+            login: vi.fn(),
+        },
+        UserConflictError: class extends Error {},
+        AccountStatusError: class extends Error {
+            statusCode: number
+            body: any
+            constructor(statusCode: number, body: any) {
+                super()
+                this.statusCode = statusCode
+                this.body = body
+            }
+        },
+        AuthenticationError: class extends Error {}
+    }
+})
 
 vi.mock('../src/config/database', () => ({
     default: {
@@ -105,39 +126,28 @@ describe('AuthController', () => {
                 username: 'testuser',
             }
 
-            const mockUser = {
-                id: '1',
-                email: 'test@example.com',
-                username: 'testuser',
-                role: 'LEARNER',
-            }
-
-            ;(prisma.user.findFirst as any).mockResolvedValue(null)
-            ;(prisma.user.create as any).mockResolvedValue(mockUser)
-            ;(prisma.verificationToken.create as any).mockResolvedValue({
-                id: 'vt1',
-                userId: '1',
-                tokenHash: mockTokenHash,
-                expiresAt: new Date(Date.now() + 86400000),
+            ;(AuthService.register as any).mockResolvedValue({
+                token: 'mock_token',
+                user: {
+                    id: '1',
+                    email: 'test@example.com',
+                    username: 'testuser',
+                    role: 'LEARNER',
+                }
             })
 
             await authController.register(mockRequest as Request, mockResponse as Response)
 
-            expect(prisma.user.create).toHaveBeenCalled()
-            expect(prisma.verificationToken.create).toHaveBeenCalledWith(
+            expect(AuthService.register).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    data: expect.objectContaining({
-                        userId: '1',
-                        tokenHash: mockTokenHash,
-                    }),
-                })
-            )
-            expect(emailService.queueEmail).toHaveBeenCalledWith(
-                '1',
-                'test@example.com',
-                expect.any(String),
+                    email: 'test@example.com',
+                    password: 'Password123!',
+                    username: 'testuser'
+                }),
+                expect.any(String), 
                 expect.any(String)
             )
+            
             expect(mockResponse.status).toHaveBeenCalledWith(201)
             expect(mockResponse.json).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -170,7 +180,7 @@ describe('AuthController', () => {
                 username: 'exists',
             }
 
-            ;(prisma.user.findFirst as any).mockResolvedValue({ id: '1' })
+            ;(AuthService.register as any).mockRejectedValue(new UserConflictError('User with this email or username already exists'))
 
             await authController.register(mockRequest as Request, mockResponse as Response)
 
@@ -189,31 +199,23 @@ describe('AuthController', () => {
 
             const consoleSpy = vi.spyOn(console, 'error')
 
-            ;(prisma.user.findFirst as any).mockResolvedValue(null)
-            ;(prisma.user.create as any).mockResolvedValue({
-                id: '1',
-                email: 'test@example.com',
-                username: 'testuser',
-                role: 'LEARNER',
+            ;(AuthService.register as any).mockResolvedValue({
+                token: 'mock_token',
+                user: {
+                    id: '1',
+                    email: 'test@example.com',
+                    username: 'testuser',
+                    role: 'LEARNER',
+                }
             })
-            ;(prisma.verificationToken.create as any).mockResolvedValue({
-                id: 'vt1',
-                userId: '1',
-                tokenHash: mockTokenHash,
-                expiresAt: new Date(Date.now() + 86400000),
-            })
-
-            const createSpy = prisma.verificationToken.create as any
 
             await authController.register(mockRequest as Request, mockResponse as Response)
 
-            const createCallArgs = createSpy.mock.calls[0][0]
-            expect(createCallArgs.data).not.toHaveProperty('token')
-            expect(createCallArgs.data.tokenHash).toBe(mockTokenHash)
-            expect(createCallArgs.data.tokenHash).not.toBe(mockRawToken)
-            expect(consoleSpy).not.toHaveBeenCalledWith(
-                expect.stringContaining(mockRawToken)
-            )
+            // The service is responsible for handling token generation and storage now
+            expect(AuthService.register).toHaveBeenCalled()
+            expect(consoleSpy).not.toHaveBeenCalled()
+            
+            consoleSpy.mockRestore()
         })
     })
 
@@ -587,52 +589,37 @@ describe('AuthController', () => {
                 password: 'Password123!',
             }
 
-            const mockUser = {
-                id: '1',
-                email: 'test@example.com',
-                password: 'hashed_password',
-                username: 'testuser',
-                role: 'LEARNER',
-            }
+            ;(AuthService.login as any).mockResolvedValue({
+                token: 'mock_token',
+                user: {
+                    id: '1',
+                    email: 'test@example.com',
+                    username: 'testuser',
+                    role: 'LEARNER',
+                }
+            })
 
-            ;(prisma.user.findUnique as any).mockResolvedValue(mockUser)
-            ;(bcrypt.compare as any).mockResolvedValue(true)
-            ;(prisma.user.update as any).mockResolvedValue(mockUser)
-
-            await authController.login(
-                mockRequest as Request,
-                mockResponse as Response
-            )
+            await authController.login(mockRequest as Request, mockResponse as Response)
 
             expect(mockResponse.status).toHaveBeenCalledWith(200)
             expect(mockResponse.json).toHaveBeenCalledWith(
                 expect.objectContaining({
                     message: 'Login successful',
                     token: 'mock_token',
+                    user: expect.objectContaining({ email: 'test@example.com' })
                 })
             )
         })
 
         it('should return 403 with ACCOUNT_DEACTIVATED for deactivated accounts', async () => {
             mockRequest.body = {
-                email: 'test@example.com',
+                email: 'deactivated@example.com',
                 password: 'Password123!',
             }
 
-            ;(prisma.user.findUnique as any).mockResolvedValue({
-                id: '1',
-                email: 'test@example.com',
-                password: 'hashed_password',
-                username: 'testuser',
-                role: 'LEARNER',
-                status: 'DEACTIVATED',
-            })
-            ;(bcrypt.compare as any).mockResolvedValue(true)
+            ;(AuthService.login as any).mockRejectedValue(new AccountStatusError(403, { error: 'Account is deactivated', code: 'ACCOUNT_DEACTIVATED' }))
 
-            await authController.login(
-                mockRequest as Request,
-                mockResponse as Response
-            )
+            await authController.login(mockRequest as Request, mockResponse as Response)
 
             expect(mockResponse.status).toHaveBeenCalledWith(403)
             expect(mockResponse.json).toHaveBeenCalledWith(
@@ -642,33 +629,25 @@ describe('AuthController', () => {
 
         it('should return 403 with scheduledFor for accounts pending deletion', async () => {
             mockRequest.body = {
-                email: 'test@example.com',
+                email: 'pending@example.com',
                 password: 'Password123!',
             }
 
-            const scheduledFor = new Date('2026-08-18T00:00:00Z')
+            const futureDate = new Date(Date.now() + 86400000)
 
-            ;(prisma.user.findUnique as any).mockResolvedValue({
-                id: '1',
-                email: 'test@example.com',
-                password: 'hashed_password',
-                username: 'testuser',
-                role: 'LEARNER',
-                status: 'PENDING_DELETION',
-            })
-            ;(bcrypt.compare as any).mockResolvedValue(true)
-            ;(prisma.accountDeletionRequest.findFirst as any).mockResolvedValue({ scheduledFor })
+            ;(AuthService.login as any).mockRejectedValue(new AccountStatusError(403, {
+                error: 'Account is scheduled for deletion',
+                code: 'ACCOUNT_PENDING_DELETION',
+                scheduledFor: futureDate,
+            }))
 
-            await authController.login(
-                mockRequest as Request,
-                mockResponse as Response
-            )
+            await authController.login(mockRequest as Request, mockResponse as Response)
 
             expect(mockResponse.status).toHaveBeenCalledWith(403)
             expect(mockResponse.json).toHaveBeenCalledWith(
                 expect.objectContaining({
                     code: 'ACCOUNT_PENDING_DELETION',
-                    scheduledFor,
+                    scheduledFor: futureDate,
                 })
             )
         })
@@ -679,20 +658,9 @@ describe('AuthController', () => {
                 password: 'Password123!',
             }
 
-            ;(prisma.user.findUnique as any).mockResolvedValue({
-                id: '1',
-                email: 'deleted+abc@anon.invalid',
-                password: 'tombstone',
-                username: 'deleted_abc',
-                role: 'LEARNER',
-                status: 'DELETED',
-            })
-            ;(bcrypt.compare as any).mockResolvedValue(true)
+            ;(AuthService.login as any).mockRejectedValue(new AuthenticationError('Invalid credentials'))
 
-            await authController.login(
-                mockRequest as Request,
-                mockResponse as Response
-            )
+            await authController.login(mockRequest as Request, mockResponse as Response)
 
             expect(mockResponse.status).toHaveBeenCalledWith(401)
             expect(mockResponse.json).toHaveBeenCalledWith({ error: 'Invalid credentials' })
